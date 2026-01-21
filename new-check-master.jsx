@@ -490,7 +490,8 @@
         const db = getFirestore(app);
 
         // State
-        let APP_ID = localStorage.getItem('checklist_master_app_id');
+        const DEFAULT_APP_ID = 'general-master-data';
+        let APP_ID = localStorage.getItem('checklist_master_app_id') || DEFAULT_APP_ID;
         let collections = {};
         let masterCache = {};
 
@@ -536,11 +537,12 @@
 
         // Initialization
         async function init() {
-            if (!APP_ID) {
-                document.getElementById('firebase-config-modal').classList.remove('hidden');
-            } else {
-                startApp();
+            const input = document.getElementById('data-id-input');
+            if (input) input.value = APP_ID;
+            if (!localStorage.getItem('checklist_master_app_id')) {
+                localStorage.setItem('checklist_master_app_id', APP_ID);
             }
+            startApp();
         }
 
         document.getElementById('firebase-config-form').addEventListener('submit', (e) => {
@@ -960,6 +962,18 @@
             return contentId.replace('#master-tab-content-', '');
         }
 
+        function parseCSVLine(line) {
+            return line
+                .split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
+                .map(v => v.trim())
+                .map(value => {
+                    if (value.startsWith('"') && value.endsWith('"')) {
+                        return value.slice(1, -1).replace(/""/g, '"');
+                    }
+                    return value;
+                });
+        }
+
         function readCSVFile(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -974,7 +988,7 @@
                     const data = [];
 
                     for (let i = 1; i < lines.length; i++) {
-                        const values = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.trim()); // Quotes support
+                        const values = parseCSVLine(lines[i]);
                         
                         if (values.length !== headers.length) {
                             console.warn(`Skipping line ${i + 1} due to column mismatch: ${lines[i]}`);
@@ -1153,29 +1167,47 @@
                 const text = document.getElementById('csv-data').value;
                 // CSVのヘッダーはUIに表示されているものを想定
                 const headers = ['lastName', 'firstName', 'lastName_kana', 'firstName_kana', 'employeeId', 'email', 'store', 'role', 'pincode', 'hourly_wage', 'retirementDate', 'nickname'];
-                const lines = text.split('\n').filter(l => l.trim());
+                const lines = text.split(/\r\n|\n/).map(l => l.trim()).filter(Boolean);
+                if (lines.length === 0) {
+                    alert('登録するデータがありません。');
+                    return;
+                }
                 const batch = writeBatch(db);
                 let count = 0;
+                let skipped = 0;
                 
                 lines.forEach(line => {
-                    const values = line.split(',').map(s=>s.trim());
-                    if(values.length >= 6) { 
+                    const values = parseCSVLine(line);
+                    if (values.length >= 6) {
                         const data = {};
-                        headers.forEach((h, i) => data[h] = values[i]);
+                        headers.forEach((h, i) => data[h] = values[i] ?? '');
                         
-                        if(data.lastName && data.employeeId && data.store && data.role) {
+                        if (data.lastName && data.employeeId && data.store && data.role) {
                             const ref = doc(collections.employees);
                             // 型変換
                             data.hourly_wage = data.hourly_wage ? parseFloat(data.hourly_wage) : null;
                             data.createdAt = serverTimestamp();
                             batch.set(ref, data);
                             count++;
+                        } else {
+                            skipped++;
                         }
+                    } else {
+                        skipped++;
                     }
                 });
                 
+                if (count === 0) {
+                    alert('有効なデータが見つかりませんでした。');
+                    return;
+                }
+                
                 await batch.commit();
-                alert(`${count}件登録しました`);
+                if (skipped > 0) {
+                    alert(`${count}件登録しました（${skipped}件は形式不正または必須項目不足でスキップ）`);
+                } else {
+                    alert(`${count}件登録しました`);
+                }
                 toggle('bulk-import-modal', false);
                 fetchAllData();
             };
@@ -1226,9 +1258,49 @@
             
             // Deduplicate Logic
             document.getElementById('deduplicate-employees-btn').onclick = async () => {
-                if (confirm("同じ氏名とメールアドレスを持つ重複した従業員を削除します。この操作は元に戻せません。よろしいですか？")) {
-                    // 簡略化のため、ここではUI側で重複をチェックし削除する実装を省略します
-                    alert('この機能は未実装です。手動で重複削除を行ってください。');
+                if (!confirm("同じ従業員IDまたは氏名＋メールアドレスが一致する重複データを削除します。この操作は元に戻せません。よろしいですか？")) {
+                    return;
+                }
+                try {
+                    const snapshot = await getDocs(collections.employees);
+                    if (snapshot.empty) {
+                        alert('従業員データがありません。');
+                        return;
+                    }
+                    
+                    const seen = new Map();
+                    const toDelete = [];
+                    
+                    snapshot.docs.forEach(docSnap => {
+                        const emp = docSnap.data();
+                        const idKey = emp.employeeId ? `id:${emp.employeeId}` : '';
+                        const nameEmailKey = (emp.lastName || emp.firstName || emp.email)
+                            ? `ne:${emp.lastName || ''}|${emp.firstName || ''}|${emp.email || ''}`
+                            : '';
+                        const key = idKey || nameEmailKey;
+                        
+                        if (!key) return;
+                        
+                        if (seen.has(key)) {
+                            toDelete.push(docSnap.id);
+                        } else {
+                            seen.set(key, docSnap.id);
+                        }
+                    });
+                    
+                    if (toDelete.length === 0) {
+                        alert('重複した従業員は見つかりませんでした。');
+                        return;
+                    }
+                    
+                    const batch = writeBatch(db);
+                    toDelete.forEach(id => batch.delete(doc(collections.employees, id)));
+                    await batch.commit();
+                    alert(`${toDelete.length}件の重複データを削除しました。`);
+                    fetchAllData();
+                } catch (error) {
+                    console.error("Deduplicate error:", error);
+                    alert(`重複削除中にエラーが発生しました: ${error.message}`);
                 }
             };
         }
