@@ -73,6 +73,9 @@
                          <button id="show-master-modal-btn" class="text-sm bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition">
                             マスタ管理
                         </button>
+                        <button id="show-config-modal-btn" class="text-sm bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition">
+                            データID変更
+                        </button>
                         <button id="show-path-info-modal-btn" class="text-sm bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-2 px-4 rounded-lg transition">
                             データ保管場所
                         </button>
@@ -551,8 +554,7 @@
             if (val) {
                 APP_ID = val;
                 localStorage.setItem('checklist_master_app_id', APP_ID);
-                document.getElementById('firebase-config-modal').classList.add('hidden');
-                startApp();
+                location.reload();
             }
         });
 
@@ -974,6 +976,17 @@
                 });
         }
 
+        async function commitBatches(collectionRef, items, buildDocData) {
+            const chunkSize = 450;
+            for (let i = 0; i < items.length; i += chunkSize) {
+                const batch = writeBatch(db);
+                items.slice(i, i + chunkSize).forEach(item => {
+                    batch.set(doc(collectionRef), buildDocData(item));
+                });
+                await batch.commit();
+            }
+        }
+
         function readCSVFile(file) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
@@ -1089,8 +1102,8 @@
                     return;
                 }
 
-                const batch = writeBatch(db);
                 let count = 0;
+                const itemsToSave = [];
                 
                 data.forEach(item => {
                     const docData = {};
@@ -1107,13 +1120,15 @@
                         }
                     });
                     
-                    docData.createdAt = serverTimestamp();
-                    batch.set(doc(collections[collectionName]), docData);
+                    itemsToSave.push(docData);
                     count++;
                 });
 
                 if (count > 0) {
-                    await batch.commit();
+                    await commitBatches(collections[collectionName], itemsToSave, (docData) => ({
+                        ...docData,
+                        createdAt: serverTimestamp()
+                    }));
                     alert(`${count}件のデータをインポートしました`);
                     fetchAllData();
                 } else {
@@ -1156,6 +1171,7 @@
             document.getElementById('close-employee-list-modal-btn').onclick = () => toggle('employee-list-modal', false);
             document.getElementById('show-master-modal-btn').onclick = () => toggle('master-modal', true);
             document.getElementById('close-master-modal-btn').onclick = () => toggle('master-modal', false);
+            document.getElementById('show-config-modal-btn').onclick = () => toggle('firebase-config-modal', true);
             document.getElementById('show-path-info-modal-btn').onclick = () => toggle('path-info-modal', true);
             document.getElementById('close-path-info-modal-btn').onclick = () => toggle('path-info-modal', false);
             
@@ -1172,9 +1188,9 @@
                     alert('登録するデータがありません。');
                     return;
                 }
-                const batch = writeBatch(db);
                 let count = 0;
                 let skipped = 0;
+                const validRows = [];
                 
                 lines.forEach(line => {
                     const values = parseCSVLine(line);
@@ -1183,12 +1199,9 @@
                         headers.forEach((h, i) => data[h] = values[i] ?? '');
                         
                         if (data.lastName && data.employeeId && data.store && data.role) {
-                            const ref = doc(collections.employees);
                             // 型変換
                             data.hourly_wage = data.hourly_wage ? parseFloat(data.hourly_wage) : null;
-                            data.createdAt = serverTimestamp();
-                            batch.set(ref, data);
-                            count++;
+                            validRows.push(data);
                         } else {
                             skipped++;
                         }
@@ -1202,7 +1215,11 @@
                     return;
                 }
                 
-                await batch.commit();
+                await commitBatches(collections.employees, validRows, (data) => ({
+                    ...data,
+                    createdAt: serverTimestamp()
+                }));
+                count = validRows.length;
                 if (skipped > 0) {
                     alert(`${count}件登録しました（${skipped}件は形式不正または必須項目不足でスキップ）`);
                 } else {
