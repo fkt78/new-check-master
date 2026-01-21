@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "new-check-137f9"
+  },
+  "targets": {
+    "new-check-137f9": {
+      "hosting": {
+        "new-check-master-app": [
+          "new-check-master-app"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

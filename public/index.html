@@ -1,0 +1,1346 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>チェックリスト用マスター登録 アプリ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #2d3748; }
+        ::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #718096; }
+        .modal-transition { transition: opacity 0.3s ease, transform 0.3s ease; }
+        .textarea-config { min-height: 200px; font-family: monospace; }
+        .hidden { display: none !important; }
+        .tab-btn.active {
+            border-color: #a78bfa;
+            color: #c4b5fd;
+        }
+        .copy-path-btn {
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .copy-path-btn:hover {
+            color: #fff;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white antialiased">
+    <!-- File inputs for CSV imports -->
+    <input type="file" id="master-csv-import-input" class="hidden" accept=".csv">
+    <input type="file" id="employee-csv-import-input" class="hidden" accept=".csv">
+
+    <!-- Firebase Config Modal (接続エラー時などに表示) -->
+    <div id="firebase-config-modal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[100] hidden">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-2xl border border-gray-700">
+            <h2 class="text-2xl font-semibold mb-6">初期設定</h2>
+            <p class="text-gray-400">Firebase設定を確認してください。</p>
+            <form id="firebase-config-form" class="space-y-6 mt-4">
+                <div>
+                    <label for="data-id-input" class="block text-sm font-medium text-gray-300 mb-2">データID（App ID）</label>
+                    <input type="text" id="data-id-input" required class="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-purple-500 outline-none transition" placeholder="例: checklist-app-id">
+                </div>
+                <p id="config-error" class="text-red-400 text-sm mt-2 hidden"></p>
+                <div class="flex justify-end gap-4 pt-4">
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition">設定保存して開始</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- メインアプリケーション -->
+    <div id="main-app" class="hidden">
+        <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+            <header class="mb-8 flex justify-between items-start">
+                 <div>
+                    <h1 class="text-3xl font-bold text-white flex items-center gap-3">
+                        <span class="text-yellow-400">【修正版】</span>チェックリスト用マスター登録 アプリ
+                    </h1>
+                    <p class="text-gray-400 mt-2">従業員、店舗、役職、什器、作業、商品カテゴリ、イベント、習得確認などの情報を一元管理します。</p>
+                </div>
+                <div class="text-right">
+                     <div id="data-id-display" class="mt-2 text-sm text-purple-400"></div>
+                    <div id="status-indicator" class="mt-2 text-sm text-yellow-400 animate-pulse">
+                        Firebaseに接続中...
+                    </div>
+                    <div class="flex gap-2 mt-4">
+                        <button id="show-employee-list-modal-btn" class="text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition">
+                            従業員リスト管理
+                        </button>
+                         <button id="show-master-modal-btn" class="text-sm bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition">
+                            マスタ管理
+                        </button>
+                        <button id="show-path-info-modal-btn" class="text-sm bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-2 px-4 rounded-lg transition">
+                            データ保管場所
+                        </button>
+                    </div>
+                </div>
+            </header>
+            
+            <div id="db-error-message" class="hidden bg-red-900 border-l-4 border-red-500 text-red-300 p-4 rounded-r-lg mb-6">
+                <p class="font-bold">データベースエラー</p>
+                <p class="text-sm">データの読み込みに失敗しました。コンソールを確認してください。</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+                <!-- 従業員登録フォーム -->
+                <div id="employee-form-container" class="lg:col-span-1 bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-700">
+                    <div class="flex justify-between items-center mb-6">
+                         <h2 class="text-2xl font-semibold text-white flex items-center gap-2">従業員登録</h2>
+                        <button id="show-bulk-import-btn" class="text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-3 rounded-lg transition-all duration-200">
+                            一括登録
+                        </button>
+                    </div>
+                    <form id="add-employee-form" class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="lastName" class="block text-sm font-medium text-gray-300 mb-1">姓</label>
+                                <input type="text" id="lastName" name="lastName" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500" placeholder="鈴木">
+                            </div>
+                            <div>
+                                <label for="firstName" class="block text-sm font-medium text-gray-300 mb-1">名</label>
+                                <input type="text" id="firstName" name="firstName" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500" placeholder="一郎">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="lastName_kana" class="block text-sm font-medium text-gray-300 mb-1">セイ (フリガナ)</label>
+                                <input type="text" id="lastName_kana" name="lastName_kana" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500" placeholder="スズキ">
+                            </div>
+                            <div>
+                                <label for="firstName_kana" class="block text-sm font-medium text-gray-300 mb-1">メイ (フリガナ)</label>
+                                <input type="text" id="firstName_kana" name="firstName_kana" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500" placeholder="イチロウ">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="nickname" class="block text-sm font-medium text-gray-300 mb-1">ニックネーム</label>
+                            <input type="text" id="nickname" name="nickname" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500" placeholder="すずきんぐ">
+                        </div>
+                        <div>
+                            <label for="email" class="block text-sm font-medium text-gray-300 mb-1">メールアドレス</label>
+                            <input type="email" id="email" name="email" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500" placeholder="suzuki@example.com">
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="employeeId" class="block text-sm font-medium text-gray-300 mb-1">従業員ID</label>
+                                <input type="text" id="employeeId" name="employeeId" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500" placeholder="S001">
+                            </div>
+                             <div>
+                                <label for="hourly_wage" class="block text-sm font-medium text-gray-300 mb-1">時給</label>
+                                <input type="number" id="hourly_wage" name="hourly_wage" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500" placeholder="1000">
+                            </div>
+                        </div>
+                         <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="pincode" class="block text-sm font-medium text-gray-300 mb-1">PINコード</label>
+                                <input type="text" id="pincode" name="pincode" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500" placeholder="123" maxlength="3" pattern="[0-9]{3}">
+                            </div>
+                            <div>
+                                <label for="retirementDate" class="block text-sm font-medium text-gray-300 mb-1">退職日</label>
+                                <input type="date" id="retirementDate" name="retirementDate" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="store" class="block text-sm font-medium text-gray-300 mb-1">所属店舗</label>
+                            <select id="store" name="store" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500"></select>
+                        </div>
+                        <div>
+                            <label for="role" class="block text-sm font-medium text-gray-300 mb-1">役職</label>
+                            <select id="role" name="role" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500"></select>
+                        </div>
+                        <button type="submit" class="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-transform hover:scale-105">登録</button>
+                    </form>
+                </div>
+            
+                <!-- マスタ入力フォームエリア -->
+                <div id="master-forms-container" class="lg:col-span-1 bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-700">
+                     <h2 class="text-2xl font-semibold text-white flex items-center gap-2 mb-6">マスタ項目追加</h2>
+                     <div class="border-b border-gray-700 mb-4">
+                        <nav id="main-master-tabs" class="-mb-px flex space-x-4 overflow-x-auto" aria-label="Tabs">
+                             <a href="#main-tab-stores" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">店舗</a>
+                             <a href="#main-tab-roles" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">役職</a>
+                             <a href="#main-tab-fixtures" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">什器</a>
+                             <a href="#main-tab-work_types" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">作業種類</a>
+                             <a href="#main-tab-work_items" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">作業項目</a>
+                             <a href="#main-tab-work_times" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">作業時間</a>
+                             <a href="#main-tab-product_categories" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">商品カテゴリ</a>
+                             <a href="#main-tab-events" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">イベント</a>
+                             <a href="#main-tab-skill_categories" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">習得カテゴリ</a>
+                             <a href="#main-tab-skill_checks" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">習得確認</a>
+                             <a href="#main-tab-toilet_cleaning" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">トイレ掃除</a>
+                             <a href="#main-tab-handovers" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">引き継ぎ</a>
+                             <a href="#main-tab-haccp" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">HACCP</a>
+                        </nav>
+                    </div>
+                    <div id="main-master-tab-content-container">
+                        <!-- 店舗 -->
+                        <div id="main-tab-stores" class="main-master-tab-content">
+                            <form id="add-store-form" class="flex gap-2">
+                                <input type="text" id="new-store-name" placeholder="新しい店舗名を追加" required class="flex-grow bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500">
+                                <button type="submit" class="bg-cyan-600 hover:bg-cyan-700 text-white font-bold p-2 rounded-lg text-sm transition">追加</button>
+                            </form>
+                        </div>
+                        <!-- 役職 -->
+                        <div id="main-tab-roles" class="main-master-tab-content hidden">
+                            <form id="add-role-form" class="flex gap-2">
+                                <input type="text" id="new-role-name" placeholder="新しい役職名を追加" required class="flex-grow bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500">
+                                <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-bold p-2 rounded-lg text-sm transition">追加</button>
+                            </form>
+                        </div>
+                        <!-- 什器 -->
+                        <div id="main-tab-fixtures" class="main-master-tab-content hidden">
+                            <form id="add-fixture-form" class="space-y-2">
+                                <input type="text" id="new-fixture-name" placeholder="新しい什器名を追加" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500">
+                                <input type="text" id="new-fixture-manufacturer" placeholder="メーカー名" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <input type="text" id="new-fixture-model-number" placeholder="型番" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500">
+                                    <input type="text" id="new-fixture-model-type" placeholder="型式" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500">
+                                </div>
+                                <div class="flex gap-2">
+                                    <input type="number" id="new-fixture-temp-min" placeholder="下限温度(℃)" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500">
+                                    <input type="number" id="new-fixture-temp-max" placeholder="上限温度(℃)" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500">
+                                </div>
+                                <label class="flex items-center space-x-2 text-sm cursor-pointer">
+                                    <input type="checkbox" id="new-fixture-manual-drain" class="form-checkbox h-4 w-4 bg-gray-700 border-gray-600 rounded text-teal-500 focus:ring-teal-500">
+                                    <span>手動排水が必要</span>
+                                </label>
+                                <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold p-2 rounded-lg text-sm transition">追加</button>
+                            </form>
+                        </div>
+                        <!-- 作業種類 -->
+                        <div id="main-tab-work_types" class="main-master-tab-content hidden">
+                             <form id="add-work-type-form" class="flex gap-2">
+                                <input type="text" id="new-work-type-name" placeholder="新しい作業種類を追加 (例: 清掃)" required class="flex-grow bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-pink-500">
+                                <button type="submit" class="bg-pink-600 hover:bg-pink-700 text-white font-bold p-2 rounded-lg text-sm transition">追加</button>
+                            </form>
+                        </div>
+                        <!-- 作業項目 -->
+                         <div id="main-tab-work_items" class="main-master-tab-content hidden">
+                            <form id="add-work-item-form" class="space-y-3">
+                                <input type="text" id="new-work-item-name" placeholder="新しい作業項目名を追加 (例: 床清掃)" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-rose-500">
+                                <input type="number" id="new-work-item-time" placeholder="適正時間（分）" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-rose-500">
+                                <div>
+                                    <label class="text-sm text-gray-300">所属する作業種類を選択</label>
+                                    <div id="work-type-checkboxes" class="mt-2 space-y-2 max-h-32 overflow-y-auto p-2 bg-gray-900 rounded-md">
+                                        <p class="text-gray-500 text-sm">作業種類を先に登録してください</p>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="text-sm text-gray-300">実施曜日を選択</label>
+                                    <div id="add-work-item-days" class="mt-2 grid grid-cols-4 gap-x-4 gap-y-2">
+                                        <!-- JS will populate this -->
+                                    </div>
+                                </div>
+                                <button type="submit" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold p-2 rounded-lg text-sm transition">追加</button>
+                            </form>
+                        </div>
+                        <!-- 作業時間 -->
+                        <div id="main-tab-work_times" class="main-master-tab-content hidden">
+                            <form id="add-work-time-form" class="space-y-3">
+                                <input type="text" id="new-work-time-name" placeholder="作業名 (例: レジ締め)" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-yellow-500">
+                                <input type="text" id="new-work-time-category" placeholder="カテゴリ (例: 締め作業)" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-yellow-500">
+                                <input type="number" id="new-work-time-standard-time" placeholder="基準時間（分）" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-yellow-500">
+                                <button type="submit" class="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold p-2 rounded-lg text-sm transition">追加</button>
+                            </form>
+                        </div>
+                        <!-- 商品カテゴリ -->
+                         <div id="main-tab-product_categories" class="main-master-tab-content hidden">
+                            <form id="add-product-category-form" class="flex gap-2">
+                                <input type="text" id="new-product-category-name" placeholder="新しい商品カテゴリを追加 (例: 飲料)" required class="flex-grow bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-lime-500">
+                                <button type="submit" class="bg-lime-600 hover:bg-lime-700 text-white font-bold p-2 rounded-lg text-sm transition">追加</button>
+                            </form>
+                        </div>
+                        <!-- イベント -->
+                         <div id="main-tab-events" class="main-master-tab-content hidden">
+                             <form id="add-event-form" class="flex gap-2">
+                                <input type="text" id="new-event-name" placeholder="新しいイベント名を追加 (例: 地域お祭り)" required class="flex-grow bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500">
+                                <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white font-bold p-2 rounded-lg text-sm transition">追加</button>
+                            </form>
+                        </div>
+                        <!-- 習得カテゴリ -->
+                        <div id="main-tab-skill_categories" class="main-master-tab-content hidden">
+                            <form id="add-skill-category-form" class="flex gap-2">
+                                <input type="text" id="new-skill-category-name" placeholder="新しい習得カテゴリを追加 (例: レジ項目)" required class="flex-grow bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">
+                                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold p-2 rounded-lg text-sm transition">追加</button>
+                            </form>
+                        </div>
+                        <!-- 習得確認 -->
+                        <div id="main-tab-skill_checks" class="main-master-tab-content hidden">
+                           <form id="add-skill-check-form" class="space-y-3">
+                                <input type="text" id="new-skill-check-name" placeholder="新しい習得確認項目を追加" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500">
+                                <div>
+                                    <label class="text-sm text-gray-300">所属する習得カテゴリを選択</label>
+                                    <select id="skill-category-select" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mt-1 focus:ring-2 focus:ring-sky-500">
+                                        <option value="">選択してください</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold p-2 rounded-lg text-sm transition">追加</button>
+                            </form>
+                        </div>
+                        <!-- その他 -->
+                        <div id="main-tab-toilet_cleaning" class="main-master-tab-content hidden">
+                            <form id="add-toilet-cleaning-form" class="flex gap-2">
+                                <input type="text" id="new-toilet-cleaning-name" placeholder="新しいトイレ掃除項目を追加" required class="flex-grow bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-slate-500">
+                                <button type="submit" class="bg-slate-600 hover:bg-slate-700 text-white font-bold p-2 rounded-lg text-sm transition">追加</button>
+                            </form>
+                        </div>
+                        <div id="main-tab-handovers" class="main-master-tab-content hidden">
+                            <form id="add-handover-form" class="flex gap-2">
+                                <input type="text" id="new-handover-name" placeholder="新しい引き継ぎ項目を追加" required class="flex-grow bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-zinc-500">
+                                <button type="submit" class="bg-zinc-600 hover:bg-zinc-700 text-white font-bold p-2 rounded-lg text-sm transition">追加</button>
+                            </form>
+                        </div>
+                        <div id="main-tab-haccp" class="main-master-tab-content hidden">
+                            <form id="add-haccp-form" class="flex gap-2">
+                                <input type="text" id="new-haccp-name" placeholder="新しいHACCP項目を追加" required class="flex-grow bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-fuchsia-500">
+                                <button type="submit" class="bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold p-2 rounded-lg text-sm transition">追加</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- モーダル各種 (デザイン復元) -->
+    
+    <!-- 従業員リスト管理モーダル -->
+    <div id="employee-list-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center hidden modal-transition opacity-0 z-40">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-7xl h-5/6 border border-gray-700 transform scale-95 modal-transition flex flex-col">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold">従業員リスト管理</h2>
+                <div class="flex items-center gap-4">
+                    <button id="import-employees-csv-btn" class="text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition">CSVインポート</button>
+                    <button id="export-employees-csv-btn" class="text-sm bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded-lg transition">CSVエクスポート</button>
+                    <button id="deduplicate-employees-btn" class="text-sm bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition">重複削除</button>
+                    <button id="close-employee-list-modal-btn" class="text-gray-400 hover:text-white text-3xl">&times;</button>
+                </div>
+            </div>
+            <div class="border-b border-gray-700 mb-4">
+                <nav id="employee-tabs" class="-mb-px flex space-x-4" aria-label="Tabs">
+                    <a href="#active-employees" class="tab-btn employee-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">在職者</a>
+                    <a href="#retired-employees" class="tab-btn employee-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">退職者</a>
+                </nav>
+            </div>
+             <div class="overflow-y-auto flex-grow">
+                <div id="active-employees" class="employee-tab-content">
+                    <table class="w-full text-sm text-left text-gray-300">
+                        <thead class="text-xs text-gray-400 uppercase bg-gray-700 sticky top-0">
+                            <tr>
+                                <th class="px-6 py-3 rounded-l-lg">氏名</th>
+                                <th class="px-6 py-3">フリガナ</th>
+                                <th class="px-6 py-3">従業員ID</th>
+                                <th class="px-6 py-3">PIN</th>
+                                <th class="px-6 py-3">所属店舗</th>
+                                <th class="px-6 py-3">役職</th>
+                                <th class="px-6 py-3">時給</th>
+                                <th class="px-6 py-3 rounded-r-lg text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="active-employee-list"></tbody>
+                    </table>
+                </div>
+                <div id="retired-employees" class="employee-tab-content hidden">
+                      <table class="w-full text-sm text-left text-gray-300">
+                        <thead class="text-xs text-gray-400 uppercase bg-gray-700 sticky top-0">
+                            <tr>
+                                <th class="px-6 py-3 rounded-l-lg">氏名</th>
+                                <th class="px-6 py-3">フリガナ</th>
+                                <th class="px-6 py-3">従業員ID</th>
+                                <th class="px-6 py-3">所属店舗</th>
+                                <th class="px-6 py-3">退職日</th>
+                                <th class="px-6 py-3 rounded-r-lg text-center">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="retired-employee-list"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- マスタ管理モーダル -->
+    <div id="master-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center hidden modal-transition opacity-0 z-40">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-5xl h-5/6 border border-gray-700 transform scale-95 modal-transition flex flex-col">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold">マスタデータ管理</h2>
+                 <div class="flex gap-2">
+                    <button id="import-master-csv-btn" class="text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition">CSVインポート</button>
+                    <button id="export-master-csv-btn" class="text-sm bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded-lg transition">CSVエクスポート</button>
+                    <button id="close-master-modal-btn" class="text-gray-400 hover:text-white text-3xl">&times;</button>
+                </div>
+            </div>
+            <div class="flex flex-col flex-grow min-h-0">
+                 <div class="border-b border-gray-700 mb-4">
+                    <nav id="master-tabs" class="-mb-px flex space-x-4 overflow-x-auto" aria-label="Tabs">
+                         <a href="#master-tab-content-stores" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">店舗</a>
+                         <a href="#master-tab-content-roles" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">役職</a>
+                         <a href="#master-tab-content-fixtures" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">什器</a>
+                         <a href="#master-tab-content-work-types" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">作業種類</a>
+                         <a href="#master-tab-content-work-items" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">作業項目</a>
+                         <a href="#master-tab-content-work-times" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">作業時間</a>
+                         <a href="#master-tab-content-product-categories" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">商品カテゴリ</a>
+                         <a href="#master-tab-content-events" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">イベント</a>
+                         <a href="#master-tab-content-skill-categories" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">習得カテゴリ</a>
+                         <a href="#master-tab-content-skill-checks" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">習得確認</a>
+                         <a href="#master-tab-content-toilet-cleaning" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">トイレ掃除</a>
+                         <a href="#master-tab-content-handovers" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">引き継ぎ</a>
+                         <a href="#master-tab-content-haccp" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">HACCP</a>
+                    </nav>
+                </div>
+                <div class="flex-grow overflow-y-auto pr-2 min-h-0">
+                    <!-- 各マスタリスト -->
+                    <div id="master-tab-content-stores" class="master-tab-content"><ul id="store-master-list" class="space-y-2"></ul></div>
+                    <div id="master-tab-content-roles" class="master-tab-content hidden"><table class="w-full text-sm text-left text-gray-300"><thead class="text-xs text-gray-400 uppercase bg-gray-700"><tr><th class="px-4 py-2 rounded-l-lg">役職名</th><th class="px-4 py-2">担当作業項目</th><th class="px-4 py-2 rounded-r-lg text-center">操作</th></tr></thead><tbody id="role-master-list"></tbody></table></div>
+                    <div id="master-tab-content-fixtures" class="master-tab-content hidden"><table class="w-full text-sm text-left text-gray-300"><thead class="text-xs text-gray-400 uppercase bg-gray-700"><tr><th class="px-4 py-2 rounded-l-lg">什器名</th><th class="px-4 py-2">メーカー名</th><th class="px-4 py-2">型番</th><th class="px-4 py-2">手動排水</th><th class="px-4 py-2 rounded-r-lg text-center">操作</th></tr></thead><tbody id="fixture-master-list"></tbody></table></div>
+                    <div id="master-tab-content-work-types" class="master-tab-content hidden"><ul id="work-type-master-list" class="space-y-2"></ul></div>
+                    <div id="master-tab-content-work-items" class="master-tab-content hidden">
+                        <table class="w-full text-sm text-left text-gray-300"><thead class="text-xs text-gray-400 uppercase bg-gray-700"><tr><th class="px-4 py-2 rounded-l-lg">作業項目名</th><th class="px-4 py-2">所属する作業種類</th><th class="px-4 py-2">実施曜日</th><th class="px-4 py-2">適正時間(分)</th><th class="px-4 py-2 rounded-r-lg text-center">操作</th></tr></thead><tbody id="work-item-master-list"></tbody></table>
+                    </div>
+                     <div id="master-tab-content-work-times" class="master-tab-content hidden">
+                        <table class="w-full text-sm text-left text-gray-300"><thead class="text-xs text-gray-400 uppercase bg-gray-700"><tr><th class="px-4 py-2 rounded-l-lg">作業名</th><th class="px-4 py-2">カテゴリ</th><th class="px-4 py-2">基準時間(分)</th><th class="px-4 py-2 rounded-r-lg text-center">操作</th></tr></thead><tbody id="work-times-master-list"></tbody></table>
+                    </div>
+                    <div id="master-tab-content-product-categories" class="master-tab-content hidden"><ul id="product-category-master-list" class="space-y-2"></ul></div>
+                    <div id="master-tab-content-events" class="master-tab-content hidden"><ul id="event-master-list" class="space-y-2"></ul></div>
+                    <div id="master-tab-content-skill-categories" class="master-tab-content hidden"><ul id="skill-category-master-list" class="space-y-2"></ul></div>
+                    <div id="master-tab-content-skill-checks" class="master-tab-content hidden"><table class="w-full text-sm text-left text-gray-300"><thead class="text-xs text-gray-400 uppercase bg-gray-700"><tr><th class="px-4 py-2 rounded-l-lg">習得確認項目</th><th class="px-4 py-2">所属カテゴリ</th><th class="px-4 py-2 rounded-r-lg text-center">操作</th></tr></thead><tbody id="skill-check-master-list"></tbody></table></div>
+                    <div id="master-tab-content-toilet-cleaning" class="master-tab-content hidden"><ul id="toilet-cleaning-master-list" class="space-y-2"></ul></div>
+                    <div id="master-tab-content-handovers" class="master-tab-content hidden"><ul id="handover-master-list" class="space-y-2"></ul></div>
+                    <div id="master-tab-content-haccp" class="master-tab-content hidden"><ul id="haccp-master-list" class="space-y-2"></ul></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Path Info Modal -->
+    <div id="path-info-modal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center hidden modal-transition opacity-0 z-40">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-4xl h-5/6 border border-gray-700 transform scale-95 modal-transition flex flex-col">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold">データ保管場所（コレクションパス）</h2>
+                <button id="close-path-info-modal-btn" class="text-gray-400 hover:text-white text-3xl">&times;</button>
+            </div>
+            <div class="flex-grow overflow-y-auto pr-4 min-h-0">
+                 <p class="text-gray-400 mb-4">各マスタデータは以下のパスに保管されています。</p>
+                 <div id="collection-path-list" class="space-y-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Import Modal -->
+    <div id="bulk-import-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden modal-transition opacity-0 z-50">
+         <div class="bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-3xl border border-gray-700 transform scale-95 modal-transition">
+            <h2 class="text-2xl font-semibold mb-4">テキストで一括登録</h2>
+            <p class="text-gray-400 mb-2">カンマ区切りデータを貼り付けてください。</p>
+            <p class="text-sm bg-gray-700 p-3 rounded-lg text-gray-300 mb-4"><code>姓,名,セイ,メイ,ID,メール,店舗,役職,PIN,時給,退職日</code></p>
+            <form id="bulk-import-form">
+                <textarea id="csv-data" class="w-full bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 textarea-config" placeholder="鈴木,一郎,スズキ,イチロウ,S001,test@example.com,..."></textarea>
+                <div class="flex justify-end gap-4 pt-6">
+                    <button type="button" id="cancel-bulk-import" class="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-6 rounded-lg transition">キャンセル</button>
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg transition">実行</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 汎用編集モーダル -->
+    <div id="edit-modal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden modal-transition opacity-0 z-50">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-700 transform scale-95 modal-transition flex flex-col h-auto max-h-[85vh]">
+            <h2 id="edit-modal-title" class="text-2xl font-semibold p-8 pb-6 flex-shrink-0">編集</h2>
+            <div class="overflow-y-auto px-8 flex-grow" id="edit-modal-content">
+                <!-- 内容はJSで動的に生成されます -->
+            </div>
+             <div class="flex-shrink-0 flex justify-end gap-4 p-8 pt-6">
+                <button type="button" id="cancel-edit" class="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-6 rounded-lg transition">キャンセル</button>
+                <button type="button" id="save-edit-btn" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-6 rounded-lg transition">更新</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 確認ダイアログ -->
+    <div id="confirm-dialog" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden modal-transition opacity-0 z-50">
+        <div class="bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-sm border border-gray-700 transform scale-95 modal-transition">
+            <h3 id="confirm-title" class="text-xl font-semibold mb-4 text-white">確認</h3>
+            <p id="confirm-message" class="text-gray-300 mb-6"></p>
+            <div id="confirm-buttons" class="flex justify-end gap-4"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, doc, getDoc, getDocs, updateDoc, deleteDoc, serverTimestamp, writeBatch, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        
+        // 正しいFirebase設定
+        const firebaseConfig = {
+            apiKey: "AIzaSyAvxKaj49CfK9T5-h4AycKcguU2gsSXTxc",
+            authDomain: "new-check-137f9.firebaseapp.com",
+            projectId: "new-check-137f9",
+            storageBucket: "new-check-137f9.firebasestorage.app",
+            messagingSenderId: "534868750946",
+            appId: "1:534868750946:web:a10435f5d28280d1d8573b",
+            measurementId: "G-63WWRYMK20"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // State
+        let APP_ID = localStorage.getItem('checklist_master_app_id');
+        let collections = {};
+        let masterCache = {};
+
+        // 共通定数
+        const COLLECTIONS_SCHEMA = {
+            employees: { name: '従業員', fields: ['lastName', 'firstName', 'lastName_kana', 'firstName_kana', 'nickname', 'email', 'employeeId', 'pincode', 'hourly_wage', 'retirementDate', 'store', 'role'] },
+            stores: { name: '店舗', fields: ['name'] },
+            roles: { name: '役職', fields: ['name', 'assigned_tasks'] },
+            fixtures: { name: '什器', fields: ['name', 'manufacturer', 'model_number', 'model_type', 'temp_min', 'temp_max', 'manual_drain'] },
+            work_types: { name: '作業種類', fields: ['name'] },
+            work_items: { name: '作業項目', fields: ['name', 'associated_types', 'days_of_week', 'appropriate_time'] },
+            work_times: { name: '作業時間', fields: ['name', 'category', 'standard_time'] },
+            product_categories: { name: '商品カテゴリ', fields: ['name'] },
+            events: { name: 'イベント', fields: ['name'] },
+            skill_categories: { name: '習得カテゴリ', fields: ['name'] },
+            skill_checks: { name: '習得確認', fields: ['name', 'category'] },
+            toilet_cleaning: { name: 'トイレ掃除', fields: ['name'] },
+            handovers: { name: '引き継ぎ', fields: ['name'] },
+            haccp: { name: 'HACCP', fields: ['name'] }
+        };
+
+        // CSV ヘッダー定義
+        // NOTE: employeeのheadersはfieldsをそのまま使用し、他のマスタも動的に生成可能だが、可読性のため明示的に定義
+        const CSV_CONFIG = {
+            employees: { 
+                headers: COLLECTIONS_SCHEMA.employees.fields
+            },
+            stores: { headers: ['name'] },
+            roles: { headers: ['name', 'assigned_tasks'] },
+            fixtures: { headers: COLLECTIONS_SCHEMA.fixtures.fields },
+            work_types: { headers: ['name'] },
+            work_items: { headers: COLLECTIONS_SCHEMA.work_items.fields },
+            work_times: { headers: COLLECTIONS_SCHEMA.work_times.fields },
+            product_categories: { headers: ['name'] },
+            events: { headers: ['name'] },
+            skill_categories: { headers: ['name'] },
+            skill_checks: { headers: COLLECTIONS_SCHEMA.skill_checks.fields },
+            toilet_cleaning: { headers: ['name'] },
+            handovers: { headers: ['name'] },
+            haccp: { headers: ['name'] },
+        };
+
+
+        // Initialization
+        async function init() {
+            if (!APP_ID) {
+                document.getElementById('firebase-config-modal').classList.remove('hidden');
+            } else {
+                startApp();
+            }
+        }
+
+        document.getElementById('firebase-config-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const val = document.getElementById('data-id-input').value.trim();
+            if (val) {
+                APP_ID = val;
+                localStorage.setItem('checklist_master_app_id', APP_ID);
+                document.getElementById('firebase-config-modal').classList.add('hidden');
+                startApp();
+            }
+        });
+
+        async function startApp() {
+            document.getElementById('main-app').classList.remove('hidden');
+            document.getElementById('data-id-display').textContent = `Data ID: ${APP_ID}`;
+            
+            // Setup Collection References (Strict Path)
+            Object.keys(COLLECTIONS_SCHEMA).forEach(key => {
+                collections[key] = collection(db, 'artifacts', APP_ID, 'public', 'data', key);
+            });
+
+            try {
+                await signInAnonymously(auth);
+            } catch (e) {
+                console.error("Auth error", e);
+                document.getElementById('status-indicator').textContent = "認証エラー";
+                document.getElementById('status-indicator').className = "mt-2 text-sm text-red-500";
+            }
+
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    document.getElementById('status-indicator').textContent = "接続成功";
+                    document.getElementById('status-indicator').className = "mt-2 text-sm text-green-400";
+                    
+                    await fetchAllData();
+                    setupTabs();
+                    setupEventListeners();
+                    populatePathInfo();
+                }
+            });
+        }
+
+        // --- Data Fetching ---
+        async function fetchAllData() {
+            try {
+                // 並行取得
+                const promises = Object.keys(collections).map(async key => {
+                    const q = key === 'employees' 
+                        ? collections[key] 
+                        : query(collections[key], orderBy('name', 'asc')); 
+                        
+                    try {
+                        const snap = await getDocs(q);
+                        let items = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                        // employeesだけはJSでフリガナソート
+                        if (key === 'employees') {
+                             items.sort((a, b) => (a.lastName_kana || '').localeCompare(b.lastName_kana || '', 'ja') || (a.firstName_kana || '').localeCompare(b.firstName_kana || '', 'ja'));
+                        }
+                        masterCache[key] = items;
+                    } catch(e) {
+                        console.warn(`Fetch error for ${key}:`, e);
+                        masterCache[key] = [];
+                    }
+                });
+                await Promise.all(promises);
+                
+                updateUI();
+            } catch (e) {
+                console.error("Data fetch error", e);
+                document.getElementById('db-error-message').classList.remove('hidden');
+            }
+        }
+
+        function updateUI() {
+            updateDropdowns();
+            renderEmployeeList();
+            renderMasterLists();
+            updateWorkTypeCheckboxes();
+            updateWorkItemDays();
+        }
+
+        function updateDropdowns() {
+            // Store & Role dropdowns
+            const updateSelect = (id, data) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const currentValue = el.value; // Keep selected value
+                el.innerHTML = '<option value="">選択してください</option>';
+                (data || []).forEach(item => {
+                    el.innerHTML += `<option value="${item.name}">${item.name}</option>`;
+                });
+                if(currentValue) el.value = currentValue;
+            };
+            
+            updateSelect('store', masterCache.stores);
+            updateSelect('role', masterCache.roles);
+            updateSelect('skill-category-select', masterCache.skill_categories);
+        }
+
+        function updateWorkTypeCheckboxes() {
+            const container = document.getElementById('work-type-checkboxes');
+            if (!container) return;
+            container.innerHTML = '';
+            (masterCache.work_types || []).forEach(type => {
+                const label = document.createElement('label');
+                label.className = 'flex items-center space-x-2 text-sm cursor-pointer';
+                label.innerHTML = `<input type="checkbox" value="${type.name}" class="form-checkbox h-4 w-4 bg-gray-700 border-gray-600 rounded text-pink-500 focus:ring-pink-500"><span>${type.name}</span>`;
+                container.appendChild(label);
+            });
+             if (masterCache.work_types.length === 0) {
+                 container.innerHTML = `<p class="text-gray-500 text-sm">作業種類を先に登録してください</p>`;
+             }
+        }
+
+        function updateWorkItemDays() {
+            const container = document.getElementById('add-work-item-days');
+            if (!container) return;
+            const days = ['月', '火', '水', '木', '金', '土', '日'];
+            container.innerHTML = '';
+            days.forEach(day => {
+                const label = document.createElement('label');
+                label.className = 'flex items-center space-x-2 text-sm cursor-pointer';
+                label.innerHTML = `<input type="checkbox" value="${day}" class="form-checkbox day-checkbox h-4 w-4 bg-gray-700 border-gray-600 rounded text-rose-500 focus:ring-rose-500"><span>${day}</span>`;
+                container.appendChild(label);
+            });
+        }
+
+        // --- Rendering Lists ---
+        function renderEmployeeList() {
+            const activeList = document.getElementById('active-employee-list');
+            const retiredList = document.getElementById('retired-employee-list');
+            activeList.innerHTML = '';
+            retiredList.innerHTML = '';
+
+            const employees = masterCache.employees || [];
+            const today = new Date().toISOString().split('T')[0];
+
+            employees.forEach(emp => {
+                const isRetired = emp.retirementDate && emp.retirementDate <= today;
+                const tr = document.createElement('tr');
+                tr.className = `bg-gray-800 border-b border-gray-700 hover:bg-gray-700 transition-colors ${isRetired ? 'text-gray-500' : ''}`;
+                
+                if (isRetired) {
+                    tr.innerHTML = `
+                        <td class="px-6 py-4">${emp.lastName || ''} ${emp.firstName || ''}</td>
+                        <td class="px-6 py-4">${emp.lastName_kana || ''} ${emp.firstName_kana || ''}</td>
+                        <td class="px-6 py-4">${emp.employeeId || ''}</td>
+                        <td class="px-6 py-4">${emp.store || ''}</td>
+                        <td class="px-6 py-4">${emp.retirementDate || ''}</td>
+                        <td class="px-6 py-4 text-center"><button class="text-red-500 hover:text-red-400 delete-btn" data-id="${emp.id}" data-col="employees">削除</button></td>
+                    `;
+                    retiredList.appendChild(tr);
+                } else {
+                    tr.innerHTML = `
+                        <td class="px-6 py-4 font-medium text-white">${emp.lastName || ''} ${emp.firstName || ''}</td>
+                        <td class="px-6 py-4">${emp.lastName_kana || ''} ${emp.firstName_kana || ''}</td>
+                        <td class="px-6 py-4">${emp.employeeId || ''}</td>
+                        <td class="px-6 py-4 font-mono">${emp.pincode ? '***' : '-'}</td>
+                        <td class="px-6 py-4">${emp.store || ''}</td>
+                        <td class="px-6 py-4"><span class="bg-gray-700 px-2 py-1 rounded">${emp.role || ''}</span></td>
+                        <td class="px-6 py-4">${emp.hourly_wage || '-'}</td>
+                        <td class="px-6 py-4 text-center flex gap-2 justify-center">
+                            <button class="text-orange-400 hover:text-orange-300 edit-btn" data-id="${emp.id}" data-col="employees">編集</button>
+                            <button class="text-red-500 hover:text-red-400 delete-btn" data-id="${emp.id}" data-col="employees">削除</button>
+                        </td>
+                    `;
+                    activeList.appendChild(tr);
+                }
+            });
+        }
+
+        function renderMasterLists() {
+            // 汎用レンダリング
+            const renderSimpleList = (colName, listId) => {
+                const list = document.getElementById(listId);
+                if(!list) return;
+                list.innerHTML = '';
+                (masterCache[colName] || []).forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = "flex justify-between items-center bg-gray-700 p-2 rounded-md text-sm";
+                    li.innerHTML = `<span>${item.name}</span><div class="flex gap-2"><button class="text-orange-400 edit-btn" data-id="${item.id}" data-col="${colName}">編集</button><button class="text-red-500 delete-btn" data-id="${item.id}" data-col="${colName}">削除</button></div>`;
+                    list.appendChild(li);
+                });
+            };
+
+            const renderTable = (colName, bodyId, cols) => {
+                const tbody = document.getElementById(bodyId);
+                if(!tbody) return;
+                tbody.innerHTML = '';
+                (masterCache[colName] || []).forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.className = "bg-gray-800 border-b border-gray-700";
+                    let tds = '';
+                    cols.forEach(k => {
+                        let val = item[k];
+                        if(Array.isArray(val)) val = val.join(', ');
+                        if(typeof val === 'boolean') val = val ? '要' : '不要';
+                        tds += `<td class="px-4 py-2">${val || ''}</td>`;
+                    });
+                    tds += `<td class="px-4 py-2 text-center flex gap-2 justify-center"><button class="text-orange-400 edit-btn" data-id="${item.id}" data-col="${colName}">編集</button><button class="text-red-500 delete-btn" data-id="${item.id}" data-col="${colName}">削除</button></td>`;
+                    tr.innerHTML = tds;
+                    tbody.appendChild(tr);
+                });
+            };
+
+            renderSimpleList('stores', 'store-master-list');
+            renderSimpleList('work_types', 'work-type-master-list');
+            renderSimpleList('product_categories', 'product-category-master-list');
+            renderSimpleList('events', 'event-master-list');
+            renderSimpleList('skill_categories', 'skill-category-master-list');
+            renderSimpleList('toilet_cleaning', 'toilet-cleaning-master-list');
+            renderSimpleList('handovers', 'handover-master-list');
+            renderSimpleList('haccp', 'haccp-master-list');
+
+            renderTable('roles', 'role-master-list', ['name', 'assigned_tasks']);
+            renderTable('fixtures', 'fixture-master-list', ['name', 'manufacturer', 'model_number', 'manual_drain']);
+            renderTable('work_items', 'work-item-master-list', ['name', 'associated_types', 'days_of_week', 'appropriate_time']);
+            renderTable('work_times', 'work-times-master-list', ['name', 'category', 'standard_time']);
+            renderTable('skill_checks', 'skill-check-master-list', ['name', 'category']);
+        }
+
+        // --- Forms Handling (省略) ---
+        async function handleAdd(e, collectionName) {
+             e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = {};
+            
+            // checkbox arrays
+            if(collectionName === 'work_items') {
+                data.associated_types = Array.from(document.querySelectorAll('#work-type-checkboxes input:checked')).map(c => c.value);
+                data.days_of_week = Array.from(document.querySelectorAll('#add-work-item-days input:checked')).map(c => c.value);
+            }
+
+            // manual mapping from IDs to data fields (since FormData behavior varies with structure)
+            // 簡易的にIDから値を取得するヘルパー
+            const getVal = (id) => document.getElementById(id)?.value;
+            
+            if (collectionName === 'employees') {
+                data.lastName = getVal('lastName');
+                data.firstName = getVal('firstName');
+                data.lastName_kana = getVal('lastName_kana');
+                data.firstName_kana = getVal('firstName_kana');
+                data.nickname = getVal('nickname');
+                data.email = getVal('email');
+                data.employeeId = getVal('employeeId');
+                data.hourly_wage = getVal('hourly_wage');
+                data.pincode = getVal('pincode');
+                data.retirementDate = getVal('retirementDate');
+                data.store = getVal('store');
+                data.role = getVal('role');
+            } else if (collectionName === 'stores') data.name = getVal('new-store-name');
+            else if (collectionName === 'roles') data.name = getVal('new-role-name');
+            else if (collectionName === 'fixtures') {
+                data.name = getVal('new-fixture-name');
+                data.manufacturer = getVal('new-fixture-manufacturer');
+                data.model_number = getVal('new-fixture-model-number');
+                data.model_type = getVal('new-fixture-model-type');
+                data.temp_min = getVal('new-fixture-temp-min');
+                data.temp_max = getVal('new-fixture-temp-max');
+                data.manual_drain = document.getElementById('new-fixture-manual-drain').checked;
+            }
+            else if (collectionName === 'work_types') data.name = getVal('new-work-type-name');
+            else if (collectionName === 'work_items') {
+                data.name = getVal('new-work-item-name');
+                data.appropriate_time = getVal('new-work-item-time');
+            }
+            else if (collectionName === 'work_times') {
+                data.name = getVal('new-work-time-name');
+                data.category = getVal('new-work-time-category');
+                data.standard_time = getVal('new-work-time-standard-time');
+            }
+            else if (collectionName === 'skill_checks') {
+                data.name = getVal('new-skill-check-name');
+                data.category = getVal('skill-category-select');
+            }
+            // Simple Name Inputs
+            else if(['product_categories', 'events', 'skill_categories', 'toilet_cleaning', 'handovers', 'haccp'].includes(collectionName)) {
+                const input = e.target.querySelector('input[type="text"]');
+                if(input) data.name = input.value;
+            }
+
+            // Clean undefined/Convert to Number
+            Object.keys(data).forEach(k => {
+                if (data[k] === undefined) delete data[k];
+                if (['hourly_wage', 'appropriate_time', 'standard_time', 'temp_min', 'temp_max'].includes(k) && data[k] !== "") {
+                     data[k] = parseFloat(data[k]) || null;
+                }
+            });
+            data.createdAt = serverTimestamp();
+
+            try {
+                await addDoc(collections[collectionName], data);
+                e.target.reset();
+                // Checkbox reset
+                e.target.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
+                alert("追加しました");
+                fetchAllData();
+            } catch(err) {
+                console.error(err);
+                alert("エラーが発生しました");
+            }
+        }
+
+        // --- Edit & Delete Logic (省略) ---
+        document.addEventListener('click', async (e) => {
+            if(e.target.classList.contains('delete-btn')) {
+                const id = e.target.dataset.id;
+                const col = e.target.dataset.col;
+                if(confirm('削除しますか？')) {
+                    await deleteDoc(doc(collections[col], id));
+                    fetchAllData();
+                }
+            }
+            if(e.target.classList.contains('edit-btn')) {
+                const id = e.target.dataset.id;
+                const col = e.target.dataset.col;
+                openEditModal(col, id);
+            }
+        });
+
+        async function openEditModal(colName, id) {
+            const modal = document.getElementById('edit-modal');
+            const content = document.getElementById('edit-modal-content');
+            const saveBtn = document.getElementById('save-edit-btn');
+            const item = masterCache[colName].find(i => i.id === id);
+            if(!item) return;
+
+            // Generate Form based on schema
+            const schema = COLLECTIONS_SCHEMA[colName];
+            let html = `<form id="dynamic-edit-form" class="space-y-4">`;
+            
+            // Fields logic
+            const fields = schema.fields;
+            
+            fields.forEach(field => {
+                let val = item[field] || '';
+                
+                // Dropdown for Store/Role/Category
+                if (['store', 'role', 'category'].includes(field)) {
+                    const masterKey = field === 'store' ? 'stores' : field === 'role' ? 'roles' : 'skill_categories';
+                    let selectHtml = `<select name="${field}" class="w-full bg-gray-700 border border-gray-600 rounded p-2">`;
+                    selectHtml += `<option value="">選択してください</option>`;
+                    (masterCache[masterKey] || []).forEach(m => {
+                        selectHtml += `<option value="${m.name}" ${m.name === val ? 'selected' : ''}>${m.name}</option>`;
+                    });
+                    selectHtml += `</select>`;
+                    html += `<div><label class="block text-sm text-gray-400">${field}</label>${selectHtml}</div>`;
+                    return;
+                }
+
+                // Checkbox for manual_drain
+                if(field === 'manual_drain') {
+                    html += `<label class="flex items-center"><input type="checkbox" name="${field}" ${val ? 'checked' : ''} class="mr-2">手動排水</label>`;
+                } 
+                // Array fields (assigned_tasks, associated_types, days_of_week)
+                else if(Array.isArray(val)) {
+                    html += `<div><label class="block text-sm text-gray-400">${field} (カンマ区切り)</label><input type="text" name="${field}" value="${val.join(',')}" class="w-full bg-gray-700 border border-gray-600 rounded p-2"></div>`;
+                } 
+                // Standard input types
+                else {
+                    let inputType = 'text';
+                    if (field.includes('time') || field.includes('wage') || field.includes('temp_') || field.includes('pincode')) inputType = 'number';
+                    if (field.includes('Date')) inputType = 'date';
+                    if (field.includes('email')) inputType = 'email';
+                    
+                    html += `<div><label class="block text-sm text-gray-400">${field}</label><input type="${inputType}" name="${field}" value="${val}" class="w-full bg-gray-700 border border-gray-600 rounded p-2"></div>`;
+                }
+            });
+            html += `</form>`;
+            
+            content.innerHTML = html;
+            modal.classList.remove('hidden');
+            setTimeout(() => { modal.classList.remove('opacity-0'); modal.querySelector('div').classList.remove('scale-95');}, 10);
+
+            saveBtn.onclick = async () => {
+                const form = document.getElementById('dynamic-edit-form');
+                const newData = {};
+                new FormData(form).forEach((v, k) => newData[k] = v);
+                
+                // Final data processing before update
+                // Checkbox handling
+                if(form.querySelector('input[name="manual_drain"]')) {
+                    newData.manual_drain = form.querySelector('input[name="manual_drain"]').checked;
+                }
+                // Array handling
+                ['assigned_tasks', 'associated_types', 'days_of_week'].forEach(k => {
+                    if(newData[k] !== undefined && typeof newData[k] === 'string') {
+                        newData[k] = newData[k].split(',').map(s => s.trim()).filter(s=>s);
+                    }
+                });
+                // Number handling
+                 ['hourly_wage', 'appropriate_time', 'standard_time', 'temp_min', 'temp_max'].forEach(k => {
+                    if (newData[k] !== undefined && newData[k] !== null && newData[k] !== "") {
+                        newData[k] = parseFloat(newData[k]) || null;
+                    } else if (newData[k] === "") {
+                         newData[k] = null;
+                    }
+                });
+
+                try {
+                    await updateDoc(doc(collections[colName], id), newData);
+                    modal.classList.add('hidden');
+                    fetchAllData();
+                } catch(e) { console.error(e); alert('更新失敗'); }
+            };
+        }
+
+        document.getElementById('cancel-edit').onclick = () => document.getElementById('edit-modal').classList.add('hidden');
+
+        // --- CSV Helper Functions ---
+
+        function getActiveCollectionName() {
+            const activeTab = document.querySelector('#master-tabs .active');
+            if (!activeTab) return null;
+            const contentId = activeTab.getAttribute('href');
+            return contentId.replace('#master-tab-content-', '');
+        }
+
+        function parseCSVLine(line) {
+            return line
+                .split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
+                .map(v => v.trim())
+                .map(value => {
+                    if (value.startsWith('"') && value.endsWith('"')) {
+                        return value.slice(1, -1).replace(/""/g, '"');
+                    }
+                    return value;
+                });
+        }
+
+        function readCSVFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const text = e.target.result;
+                    const lines = text.split(/\r\n|\n/).filter(l => l.trim());
+                    if (lines.length < 1) {
+                        return reject("ファイルにデータがありません。");
+                    }
+
+                    const headers = lines[0].split(',').map(h => h.trim());
+                    const data = [];
+
+                    for (let i = 1; i < lines.length; i++) {
+                        const values = parseCSVLine(lines[i]);
+                        
+                        if (values.length !== headers.length) {
+                            console.warn(`Skipping line ${i + 1} due to column mismatch: ${lines[i]}`);
+                            continue;
+                        }
+                        const item = {};
+                        headers.forEach((header, index) => {
+                            let value = values[index];
+                             // クォート除去
+                            if (value.startsWith('"') && value.endsWith('"')) {
+                                value = value.slice(1, -1);
+                            }
+                            item[header] = value;
+                        });
+                        data.push(item);
+                    }
+                    resolve({ headers, data });
+                };
+                reader.onerror = reject;
+                reader.readAsText(file, 'UTF-8');
+            });
+        }
+        
+        function downloadCSV(csvContent, fileName) {
+            const bom = new Uint8Array([0xEF, 0xBB, 0xBF]); // UTF-8 BOM
+            const blob = new Blob([bom, csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", fileName);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        async function exportToCSV(collectionName) {
+            const config = CSV_CONFIG[collectionName];
+            if (!config) {
+                alert('このマスタはエクスポートに対応していません。');
+                return;
+            }
+
+            try {
+                const snapshot = await getDocs(collections[collectionName]);
+                if (snapshot.empty) {
+                    alert('エクスポートするデータがありません。');
+                    return;
+                }
+                const data = snapshot.docs.map(doc => doc.data());
+                
+                let csvContent = config.headers.join(',') + '\n';
+
+                data.forEach(item => {
+                    const row = config.headers.map(header => {
+                        let value = item[header]; 
+                        
+                        if (value === null || value === undefined) {
+                            return '';
+                        }
+                        
+                        if (Array.isArray(value)) {
+                            // 配列はカンマ区切りで囲む
+                            return `"${value.join(',')}"`; 
+                        }
+                        if (typeof value === 'string' && value.includes(',')) {
+                            // カンマを含む文字列は囲む
+                            return `"${value.replace(/"/g, '""')}"`;
+                        }
+                        if (typeof value === 'boolean') {
+                             return value ? 'TRUE' : 'FALSE';
+                        }
+                        return value;
+                    });
+                    csvContent += row.join(',') + '\n';
+                });
+
+                downloadCSV(csvContent, `${collectionName}_master_${new Date().toISOString().slice(0, 10)}.csv`);
+                alert('エクスポートが完了しました。');
+
+            } catch (error) {
+                console.error(`Error exporting ${collectionName}:`, error);
+                alert(`エクスポート失敗: ${error.message}`);
+            }
+        }
+        
+        async function importMasterFromCSV(collectionName, file) {
+            try {
+                const { headers, data } = await readCSVFile(file);
+                const config = CSV_CONFIG[collectionName];
+                
+                if (!config) {
+                    throw new Error(`マスタ設定 ${collectionName} が見つかりません。`);
+                }
+
+                if (headers.length !== config.headers.length || !headers.every((h, i) => h === config.headers[i])) {
+                    alert(`ヘッダーが一致しません。\n期待されるヘッダー: ${config.headers.join(', ')}\n\n実際のヘッダー: ${headers.join(', ')}`);
+                    return;
+                }
+
+                const batch = writeBatch(db);
+                let count = 0;
+                
+                data.forEach(item => {
+                    const docData = {};
+                    config.headers.forEach(h => {
+                        let val = item[h];
+                         if (h === 'manual_drain') {
+                            docData[h] = val.toLowerCase() === 'true' || val === '要' || val === 'TRUE';
+                        } else if (['assigned_tasks', 'associated_types', 'days_of_week'].includes(h)) {
+                            docData[h] = val ? val.split(',').map(s => s.trim()).filter(s => s) : [];
+                        } else if (['hourly_wage', 'appropriate_time', 'standard_time', 'temp_min', 'temp_max'].includes(h) && val !== "") {
+                            docData[h] = parseFloat(val) || null;
+                        } else {
+                            docData[h] = val;
+                        }
+                    });
+                    
+                    docData.createdAt = serverTimestamp();
+                    batch.set(doc(collections[collectionName]), docData);
+                    count++;
+                });
+
+                if (count > 0) {
+                    await batch.commit();
+                    alert(`${count}件のデータをインポートしました`);
+                    fetchAllData();
+                } else {
+                    alert("有効なデータが見つかりませんでした。");
+                }
+            } catch (error) {
+                console.error("CSV Import Error:", error);
+                alert(`CSVインポート中にエラーが発生しました: ${error.message}`);
+            }
+        }
+
+
+        // --- Event Listeners ---
+        function setupEventListeners() {
+            // Forms
+            document.getElementById('add-employee-form').addEventListener('submit', e => handleAdd(e, 'employees'));
+            document.getElementById('add-store-form').addEventListener('submit', e => handleAdd(e, 'stores'));
+            document.getElementById('add-role-form').addEventListener('submit', e => handleAdd(e, 'roles'));
+            document.getElementById('add-fixture-form').addEventListener('submit', e => handleAdd(e, 'fixtures'));
+            document.getElementById('add-work-type-form').addEventListener('submit', e => handleAdd(e, 'work_types'));
+            document.getElementById('add-work-item-form').addEventListener('submit', e => handleAdd(e, 'work_items'));
+            document.getElementById('add-work-time-form').addEventListener('submit', e => handleAdd(e, 'work_times'));
+            document.getElementById('add-product-category-form').addEventListener('submit', e => handleAdd(e, 'product_categories'));
+            document.getElementById('add-event-form').addEventListener('submit', e => handleAdd(e, 'events'));
+            document.getElementById('add-skill-category-form').addEventListener('submit', e => handleAdd(e, 'skill_categories'));
+            document.getElementById('add-skill-check-form').addEventListener('submit', e => handleAdd(e, 'skill_checks'));
+            document.getElementById('add-toilet-cleaning-form').addEventListener('submit', e => handleAdd(e, 'toilet_cleaning'));
+            document.getElementById('add-handover-form').addEventListener('submit', e => handleAdd(e, 'handovers'));
+            document.getElementById('add-haccp-form').addEventListener('submit', e => handleAdd(e, 'haccp'));
+
+            // Modals
+            const toggle = (id, show) => {
+                const el = document.getElementById(id);
+                if(!el) return;
+                if(show) { el.classList.remove('hidden'); setTimeout(()=>el.classList.remove('opacity-0'), 10); }
+                else { el.classList.add('opacity-0'); setTimeout(()=>el.classList.add('hidden'), 300); }
+            };
+
+            document.getElementById('show-employee-list-modal-btn').onclick = () => toggle('employee-list-modal', true);
+            document.getElementById('close-employee-list-modal-btn').onclick = () => toggle('employee-list-modal', false);
+            document.getElementById('show-master-modal-btn').onclick = () => toggle('master-modal', true);
+            document.getElementById('close-master-modal-btn').onclick = () => toggle('master-modal', false);
+            document.getElementById('show-path-info-modal-btn').onclick = () => toggle('path-info-modal', true);
+            document.getElementById('close-path-info-modal-btn').onclick = () => toggle('path-info-modal', false);
+            
+            // Bulk Import (Text paste)
+            document.getElementById('show-bulk-import-btn').onclick = () => toggle('bulk-import-modal', true);
+            document.getElementById('cancel-bulk-import').onclick = () => toggle('bulk-import-modal', false);
+            document.getElementById('bulk-import-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const text = document.getElementById('csv-data').value;
+                // CSVのヘッダーはUIに表示されているものを想定
+                const headers = ['lastName', 'firstName', 'lastName_kana', 'firstName_kana', 'employeeId', 'email', 'store', 'role', 'pincode', 'hourly_wage', 'retirementDate', 'nickname'];
+                const lines = text.split(/\r\n|\n/).map(l => l.trim()).filter(Boolean);
+                if (lines.length === 0) {
+                    alert('登録するデータがありません。');
+                    return;
+                }
+                const batch = writeBatch(db);
+                let count = 0;
+                let skipped = 0;
+                
+                lines.forEach(line => {
+                    const values = parseCSVLine(line);
+                    if (values.length >= 6) {
+                        const data = {};
+                        headers.forEach((h, i) => data[h] = values[i] ?? '');
+                        
+                        if (data.lastName && data.employeeId && data.store && data.role) {
+                            const ref = doc(collections.employees);
+                            // 型変換
+                            data.hourly_wage = data.hourly_wage ? parseFloat(data.hourly_wage) : null;
+                            data.createdAt = serverTimestamp();
+                            batch.set(ref, data);
+                            count++;
+                        } else {
+                            skipped++;
+                        }
+                    } else {
+                        skipped++;
+                    }
+                });
+                
+                if (count === 0) {
+                    alert('有効なデータが見つかりませんでした。');
+                    return;
+                }
+                
+                await batch.commit();
+                if (skipped > 0) {
+                    alert(`${count}件登録しました（${skipped}件は形式不正または必須項目不足でスキップ）`);
+                } else {
+                    alert(`${count}件登録しました`);
+                }
+                toggle('bulk-import-modal', false);
+                fetchAllData();
+            };
+
+            // CSV Import/Export Connections (修正済み)
+            const employeeImportInput = document.getElementById('employee-csv-import-input');
+            const masterImportInput = document.getElementById('master-csv-import-input');
+
+            // Import Click Handlers
+            if (document.getElementById('import-employees-csv-btn')) {
+                document.getElementById('import-employees-csv-btn').onclick = () => employeeImportInput.click();
+            }
+            if (document.getElementById('import-master-csv-btn')) {
+                document.getElementById('import-master-csv-btn').onclick = () => masterImportInput.click();
+            }
+
+            // Export Click Handlers
+            if (document.getElementById('export-employees-csv-btn')) {
+                document.getElementById('export-employees-csv-btn').onclick = () => exportToCSV('employees');
+            }
+            if (document.getElementById('export-master-csv-btn')) {
+                document.getElementById('export-master-csv-btn').onclick = () => {
+                    const colName = getActiveCollectionName();
+                    if (colName) exportToCSV(colName); else alert('エクスポートするマスタタブを選択してください。');
+                };
+            }
+
+            // File Change Listeners
+            employeeImportInput.onchange = async (e) => {
+                if (e.target.files.length > 0) {
+                    await importMasterFromCSV('employees', e.target.files[0]);
+                }
+                e.target.value = null; // Reset file input
+            };
+            
+            masterImportInput.onchange = async (e) => {
+                 const colName = getActiveCollectionName();
+                 if (!colName) {
+                    alert("インポートする前に、マスタ管理画面で対象のタブを選択してください。");
+                    e.target.value = null;
+                    return;
+                 }
+                if (e.target.files.length > 0) {
+                    await importMasterFromCSV(colName, e.target.files[0]);
+                }
+                e.target.value = null; // Reset file input
+            };
+            
+            // Deduplicate Logic
+            document.getElementById('deduplicate-employees-btn').onclick = async () => {
+                if (!confirm("同じ従業員IDまたは氏名＋メールアドレスが一致する重複データを削除します。この操作は元に戻せません。よろしいですか？")) {
+                    return;
+                }
+                try {
+                    const snapshot = await getDocs(collections.employees);
+                    if (snapshot.empty) {
+                        alert('従業員データがありません。');
+                        return;
+                    }
+                    
+                    const seen = new Map();
+                    const toDelete = [];
+                    
+                    snapshot.docs.forEach(docSnap => {
+                        const emp = docSnap.data();
+                        const idKey = emp.employeeId ? `id:${emp.employeeId}` : '';
+                        const nameEmailKey = (emp.lastName || emp.firstName || emp.email)
+                            ? `ne:${emp.lastName || ''}|${emp.firstName || ''}|${emp.email || ''}`
+                            : '';
+                        const key = idKey || nameEmailKey;
+                        
+                        if (!key) return;
+                        
+                        if (seen.has(key)) {
+                            toDelete.push(docSnap.id);
+                        } else {
+                            seen.set(key, docSnap.id);
+                        }
+                    });
+                    
+                    if (toDelete.length === 0) {
+                        alert('重複した従業員は見つかりませんでした。');
+                        return;
+                    }
+                    
+                    const batch = writeBatch(db);
+                    toDelete.forEach(id => batch.delete(doc(collections.employees, id)));
+                    await batch.commit();
+                    alert(`${toDelete.length}件の重複データを削除しました。`);
+                    fetchAllData();
+                } catch (error) {
+                    console.error("Deduplicate error:", error);
+                    alert(`重複削除中にエラーが発生しました: ${error.message}`);
+                }
+            };
+        }
+
+        // --- Tabs Logic ---
+        function setupTabs() {
+            const setup = (containerId, contentClass) => {
+                const container = document.getElementById(containerId);
+                if(!container) return;
+                container.addEventListener('click', e => {
+                    if(e.target.tagName !== 'A') return;
+                    e.preventDefault();
+                    container.querySelectorAll('a').forEach(a => a.classList.remove('active', 'border-purple-400', 'text-purple-300'));
+                    e.target.classList.add('active', 'border-purple-400', 'text-purple-300');
+                    document.querySelectorAll(`.${contentClass}`).forEach(el => el.classList.add('hidden'));
+                    const target = document.getElementById(e.target.getAttribute('href').substring(1));
+                    if(target) target.classList.remove('hidden');
+                });
+                 // 初期アクティブタブを設定
+                 container.querySelector('a')?.click();
+            };
+            setup('main-master-tabs', 'main-master-tab-content');
+            setup('master-tabs', 'master-tab-content');
+            setup('employee-tabs', 'employee-tab-content');
+        }
+
+        // --- Path Info ---
+        function populatePathInfo() {
+            const list = document.getElementById('collection-path-list');
+            if(!list) return;
+            list.innerHTML = '';
+            Object.keys(COLLECTIONS_SCHEMA).forEach(key => {
+                const path = `artifacts/${APP_ID}/public/data/${key}`;
+                const div = document.createElement('div');
+                div.className = "bg-gray-700 p-3 rounded flex justify-between items-center";
+                div.innerHTML = `<div><span class="text-white font-bold">${COLLECTIONS_SCHEMA[key].name}</span><br><code class="text-xs text-gray-400 select-all">${path}</code></div><button class="text-xs bg-gray-600 px-2 py-1 rounded hover:bg-gray-500" onclick="navigator.clipboard.writeText('${path}').then(()=>alert('コピーしました'))">Copy</button>`;
+                list.appendChild(div);
+            });
+        }
+
+        // Init
+        init();
+    </script>
+</body>
+</html>
