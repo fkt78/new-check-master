@@ -41,7 +41,8 @@
             <form id="firebase-config-form" class="space-y-6 mt-4">
                 <div>
                     <label for="data-id-input" class="block text-sm font-medium text-gray-300 mb-2">データID（App ID）</label>
-                    <input type="text" id="data-id-input" required class="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-purple-500 outline-none transition" placeholder="例: checklist-app-id">
+                    <input type="text" id="data-id-input" required class="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 focus:ring-2 focus:ring-purple-500 outline-none transition" placeholder="例: general-master-data">
+            <p class="text-gray-500 text-sm mt-2">Firestore の artifacts の下にあるドキュメントID（例: general-master-data）を入力してください。</p>
                 </div>
                 <p id="config-error" class="text-red-400 text-sm mt-2 hidden"></p>
                 <div class="flex justify-end gap-4 pt-4">
@@ -62,10 +63,19 @@
                     <p class="text-gray-400 mt-2">従業員、店舗、役職、什器、作業、商品カテゴリ、イベント、習得確認などの情報を一元管理します。</p>
                 </div>
                 <div class="text-right">
-                     <div id="data-id-display" class="mt-2 text-sm text-purple-400"></div>
+                     <div class="flex items-center gap-2 mt-2">
+                        <span id="data-id-display" class="text-sm text-purple-400"></span>
+                        <button type="button" id="change-data-id-btn" class="text-xs text-gray-400 hover:text-white underline">データIDを変更</button>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-0.5">※ 正しくは <code>general-master-data</code>（最後は data）</p>
                     <div id="status-indicator" class="mt-2 text-sm text-yellow-400 animate-pulse">
                         Firebaseに接続中...
                     </div>
+                    <div id="fetch-warning" class="hidden mt-2 text-sm text-amber-400 bg-amber-900/30 border border-amber-600/50 rounded-lg px-3 py-2">
+                        データが取得できていません。Data ID が <code>general-master-data</code> か確認し、「データIDを変更」で再入力してください。
+                    </div>
+                    <div id="fetch-result-summary" class="mt-2 text-xs text-gray-400 max-w-md"></div>
+                    <button type="button" id="reload-data-btn" class="mt-2 text-sm text-cyan-400 hover:text-cyan-300 underline">データを再読み込み</button>
                     <div class="flex gap-2 mt-4">
                         <button id="show-employee-list-modal-btn" class="text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition">
                             従業員リスト管理
@@ -538,6 +548,7 @@
         async function init() {
             if (!APP_ID) {
                 document.getElementById('firebase-config-modal').classList.remove('hidden');
+                document.getElementById('data-id-input').value = 'general-master-data';
             } else {
                 startApp();
             }
@@ -586,33 +597,67 @@
 
         // --- Data Fetching ---
         async function fetchAllData() {
+            const fetchWarningEl = document.getElementById('fetch-warning');
+            const dbErrorEl = document.getElementById('db-error-message');
+            if (fetchWarningEl) fetchWarningEl.classList.add('hidden');
+            if (dbErrorEl) dbErrorEl.classList.add('hidden');
             try {
-                // 並行取得
+                let hasError = false;
+                const fetchErrors = {};
                 const promises = Object.keys(collections).map(async key => {
-                    const q = key === 'employees' 
-                        ? collections[key] 
-                        : query(collections[key], orderBy('name', 'asc')); 
-                        
                     try {
-                        const snap = await getDocs(q);
+                        const snap = await getDocs(collections[key]);
                         let items = snap.docs.map(d => ({id: d.id, ...d.data()}));
-                        // employeesだけはJSでフリガナソート
                         if (key === 'employees') {
-                             items.sort((a, b) => (a.lastName_kana || '').localeCompare(b.lastName_kana || '', 'ja') || (a.firstName_kana || '').localeCompare(b.firstName_kana || '', 'ja'));
+                            items.sort((a, b) => (a.lastName_kana || '').localeCompare(b.lastName_kana || '', 'ja') || (a.firstName_kana || '').localeCompare(b.firstName_kana || '', 'ja'));
+                        } else {
+                            items.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ja'));
                         }
                         masterCache[key] = items;
                     } catch(e) {
                         console.warn(`Fetch error for ${key}:`, e);
                         masterCache[key] = [];
+                        fetchErrors[key] = (e && e.message) || String(e);
+                        hasError = true;
                     }
                 });
                 await Promise.all(promises);
-                
+                const totalCount = Object.values(masterCache).reduce((sum, arr) => sum + arr.length, 0);
+                if (hasError && dbErrorEl) {
+                    dbErrorEl.classList.remove('hidden');
+                    dbErrorEl.querySelector('p:last-child').textContent = '一部のデータ取得に失敗しました。Data ID が general-master-data か確認し、Firestore のルールを確認してください。';
+                }
+                if (totalCount === 0 && fetchWarningEl) {
+                    fetchWarningEl.classList.remove('hidden');
+                } else if (fetchWarningEl) {
+                    fetchWarningEl.classList.add('hidden');
+                }
+                const summaryEl = document.getElementById('fetch-result-summary');
+                if (summaryEl) {
+                    const path = `artifacts/${APP_ID}/public/data/{コレクション名}`;
+                    const counts = Object.keys(COLLECTIONS_SCHEMA).map(k => {
+                        const n = (masterCache[k] || []).length;
+                        const err = fetchErrors[k];
+                        return `${COLLECTIONS_SCHEMA[k].name}: ${err ? 'エラー' : n + '件'}`;
+                    }).join(' / ');
+                    summaryEl.innerHTML = `<span class="text-gray-500">取得元: </span><code class="text-gray-400">${path}</code><br><span class="text-gray-500">取得結果: </span>${counts}`;
+                }
                 updateUI();
             } catch (e) {
                 console.error("Data fetch error", e);
-                document.getElementById('db-error-message').classList.remove('hidden');
+                if (dbErrorEl) {
+                    dbErrorEl.classList.remove('hidden');
+                    dbErrorEl.querySelector('p:last-child').textContent = 'データの読み込みに失敗しました。Data ID が「general-master-data」か確認し、ブラウザのコンソールも確認してください。';
+                }
             }
+        }
+
+        function escapeHtml(str) {
+            if (str == null) return '';
+            const s = String(str);
+            const div = document.createElement('div');
+            div.textContent = s;
+            return div.innerHTML;
         }
 
         function updateUI() {
@@ -631,7 +676,8 @@
                 const currentValue = el.value; // Keep selected value
                 el.innerHTML = '<option value="">選択してください</option>';
                 (data || []).forEach(item => {
-                    el.innerHTML += `<option value="${item.name}">${item.name}</option>`;
+                    const nameEsc = escapeHtml(item.name);
+                    el.innerHTML += `<option value="${nameEsc}">${nameEsc}</option>`;
                 });
                 if(currentValue) el.value = currentValue;
             };
@@ -648,12 +694,12 @@
             (masterCache.work_types || []).forEach(type => {
                 const label = document.createElement('label');
                 label.className = 'flex items-center space-x-2 text-sm cursor-pointer';
-                label.innerHTML = `<input type="checkbox" value="${type.name}" class="form-checkbox h-4 w-4 bg-gray-700 border-gray-600 rounded text-pink-500 focus:ring-pink-500"><span>${type.name}</span>`;
+                label.innerHTML = `<input type="checkbox" value="${escapeHtml(type.name)}" class="form-checkbox h-4 w-4 bg-gray-700 border-gray-600 rounded text-pink-500 focus:ring-pink-500"><span>${escapeHtml(type.name)}</span>`;
                 container.appendChild(label);
             });
-             if (masterCache.work_types.length === 0) {
-                 container.innerHTML = `<p class="text-gray-500 text-sm">作業種類を先に登録してください</p>`;
-             }
+            if ((masterCache.work_types || []).length === 0) {
+                container.innerHTML = `<p class="text-gray-500 text-sm">作業種類を先に登録してください</p>`;
+            }
         }
 
         function updateWorkItemDays() {
@@ -686,26 +732,26 @@
                 
                 if (isRetired) {
                     tr.innerHTML = `
-                        <td class="px-6 py-4">${emp.lastName || ''} ${emp.firstName || ''}</td>
-                        <td class="px-6 py-4">${emp.lastName_kana || ''} ${emp.firstName_kana || ''}</td>
-                        <td class="px-6 py-4">${emp.employeeId || ''}</td>
-                        <td class="px-6 py-4">${emp.store || ''}</td>
-                        <td class="px-6 py-4">${emp.retirementDate || ''}</td>
-                        <td class="px-6 py-4 text-center"><button class="text-red-500 hover:text-red-400 delete-btn" data-id="${emp.id}" data-col="employees">削除</button></td>
+                        <td class="px-6 py-4">${escapeHtml(emp.lastName || '')} ${escapeHtml(emp.firstName || '')}</td>
+                        <td class="px-6 py-4">${escapeHtml(emp.lastName_kana || '')} ${escapeHtml(emp.firstName_kana || '')}</td>
+                        <td class="px-6 py-4">${escapeHtml(emp.employeeId || '')}</td>
+                        <td class="px-6 py-4">${escapeHtml(emp.store || '')}</td>
+                        <td class="px-6 py-4">${escapeHtml(emp.retirementDate || '')}</td>
+                        <td class="px-6 py-4 text-center"><button class="text-red-500 hover:text-red-400 delete-btn" data-id="${escapeHtml(emp.id)}" data-col="employees">削除</button></td>
                     `;
                     retiredList.appendChild(tr);
                 } else {
                     tr.innerHTML = `
-                        <td class="px-6 py-4 font-medium text-white">${emp.lastName || ''} ${emp.firstName || ''}</td>
-                        <td class="px-6 py-4">${emp.lastName_kana || ''} ${emp.firstName_kana || ''}</td>
-                        <td class="px-6 py-4">${emp.employeeId || ''}</td>
+                        <td class="px-6 py-4 font-medium text-white">${escapeHtml(emp.lastName || '')} ${escapeHtml(emp.firstName || '')}</td>
+                        <td class="px-6 py-4">${escapeHtml(emp.lastName_kana || '')} ${escapeHtml(emp.firstName_kana || '')}</td>
+                        <td class="px-6 py-4">${escapeHtml(emp.employeeId || '')}</td>
                         <td class="px-6 py-4 font-mono">${emp.pincode ? '***' : '-'}</td>
-                        <td class="px-6 py-4">${emp.store || ''}</td>
-                        <td class="px-6 py-4"><span class="bg-gray-700 px-2 py-1 rounded">${emp.role || ''}</span></td>
-                        <td class="px-6 py-4">${emp.hourly_wage || '-'}</td>
+                        <td class="px-6 py-4">${escapeHtml(emp.store || '')}</td>
+                        <td class="px-6 py-4"><span class="bg-gray-700 px-2 py-1 rounded">${escapeHtml(emp.role || '')}</span></td>
+                        <td class="px-6 py-4">${escapeHtml(emp.hourly_wage || '-')}</td>
                         <td class="px-6 py-4 text-center flex gap-2 justify-center">
-                            <button class="text-orange-400 hover:text-orange-300 edit-btn" data-id="${emp.id}" data-col="employees">編集</button>
-                            <button class="text-red-500 hover:text-red-400 delete-btn" data-id="${emp.id}" data-col="employees">削除</button>
+                            <button class="text-orange-400 hover:text-orange-300 edit-btn" data-id="${escapeHtml(emp.id)}" data-col="employees">編集</button>
+                            <button class="text-red-500 hover:text-red-400 delete-btn" data-id="${escapeHtml(emp.id)}" data-col="employees">削除</button>
                         </td>
                     `;
                     activeList.appendChild(tr);
@@ -722,7 +768,7 @@
                 (masterCache[colName] || []).forEach(item => {
                     const li = document.createElement('li');
                     li.className = "flex justify-between items-center bg-gray-700 p-2 rounded-md text-sm";
-                    li.innerHTML = `<span>${item.name}</span><div class="flex gap-2"><button class="text-orange-400 edit-btn" data-id="${item.id}" data-col="${colName}">編集</button><button class="text-red-500 delete-btn" data-id="${item.id}" data-col="${colName}">削除</button></div>`;
+                    li.innerHTML = `<span>${escapeHtml(item.name)}</span><div class="flex gap-2"><button class="text-orange-400 edit-btn" data-id="${escapeHtml(item.id)}" data-col="${escapeHtml(colName)}">編集</button><button class="text-red-500 delete-btn" data-id="${escapeHtml(item.id)}" data-col="${escapeHtml(colName)}">削除</button></div>`;
                     list.appendChild(li);
                 });
             };
@@ -739,9 +785,9 @@
                         let val = item[k];
                         if(Array.isArray(val)) val = val.join(', ');
                         if(typeof val === 'boolean') val = val ? '要' : '不要';
-                        tds += `<td class="px-4 py-2">${val || ''}</td>`;
+                        tds += `<td class="px-4 py-2">${escapeHtml(val != null ? val : '')}</td>`;
                     });
-                    tds += `<td class="px-4 py-2 text-center flex gap-2 justify-center"><button class="text-orange-400 edit-btn" data-id="${item.id}" data-col="${colName}">編集</button><button class="text-red-500 delete-btn" data-id="${item.id}" data-col="${colName}">削除</button></td>`;
+                    tds += `<td class="px-4 py-2 text-center flex gap-2 justify-center"><button class="text-orange-400 edit-btn" data-id="${escapeHtml(item.id)}" data-col="${escapeHtml(colName)}">編集</button><button class="text-red-500 delete-btn" data-id="${escapeHtml(item.id)}" data-col="${escapeHtml(colName)}">削除</button></td>`;
                     tr.innerHTML = tds;
                     tbody.appendChild(tr);
                 });
@@ -850,14 +896,21 @@
             if(e.target.classList.contains('delete-btn')) {
                 const id = e.target.dataset.id;
                 const col = e.target.dataset.col;
+                if (!id || !col || !collections[col]) return;
                 if(confirm('削除しますか？')) {
-                    await deleteDoc(doc(collections[col], id));
-                    fetchAllData();
+                    try {
+                        await deleteDoc(doc(collections[col], id));
+                        await fetchAllData();
+                    } catch (err) {
+                        console.error(err);
+                        alert('削除に失敗しました。');
+                    }
                 }
             }
             if(e.target.classList.contains('edit-btn')) {
                 const id = e.target.dataset.id;
                 const col = e.target.dataset.col;
+                if (!col || !collections[col]) return;
                 openEditModal(col, id);
             }
         });
@@ -866,7 +919,7 @@
             const modal = document.getElementById('edit-modal');
             const content = document.getElementById('edit-modal-content');
             const saveBtn = document.getElementById('save-edit-btn');
-            const item = masterCache[colName].find(i => i.id === id);
+            const item = (masterCache[colName] || []).find(i => i.id === id);
             if(!item) return;
 
             // Generate Form based on schema
@@ -885,10 +938,11 @@
                     let selectHtml = `<select name="${field}" class="w-full bg-gray-700 border border-gray-600 rounded p-2">`;
                     selectHtml += `<option value="">選択してください</option>`;
                     (masterCache[masterKey] || []).forEach(m => {
-                        selectHtml += `<option value="${m.name}" ${m.name === val ? 'selected' : ''}>${m.name}</option>`;
+                        const nameEsc = escapeHtml(m.name);
+                        selectHtml += `<option value="${nameEsc}" ${m.name === val ? 'selected' : ''}>${nameEsc}</option>`;
                     });
                     selectHtml += `</select>`;
-                    html += `<div><label class="block text-sm text-gray-400">${field}</label>${selectHtml}</div>`;
+                    html += `<div><label class="block text-sm text-gray-400">${escapeHtml(field)}</label>${selectHtml}</div>`;
                     return;
                 }
 
@@ -898,7 +952,7 @@
                 } 
                 // Array fields (assigned_tasks, associated_types, days_of_week)
                 else if(Array.isArray(val)) {
-                    html += `<div><label class="block text-sm text-gray-400">${field} (カンマ区切り)</label><input type="text" name="${field}" value="${val.join(',')}" class="w-full bg-gray-700 border border-gray-600 rounded p-2"></div>`;
+                    html += `<div><label class="block text-sm text-gray-400">${escapeHtml(field)} (カンマ区切り)</label><input type="text" name="${field}" value="${escapeHtml(val.join(','))}" class="w-full bg-gray-700 border border-gray-600 rounded p-2"></div>`;
                 } 
                 // Standard input types
                 else {
@@ -907,7 +961,7 @@
                     if (field.includes('Date')) inputType = 'date';
                     if (field.includes('email')) inputType = 'email';
                     
-                    html += `<div><label class="block text-sm text-gray-400">${field}</label><input type="${inputType}" name="${field}" value="${val}" class="w-full bg-gray-700 border border-gray-600 rounded p-2"></div>`;
+                    html += `<div><label class="block text-sm text-gray-400">${escapeHtml(field)}</label><input type="${inputType}" name="${field}" value="${escapeHtml(val)}" class="w-full bg-gray-700 border border-gray-600 rounded p-2"></div>`;
                 }
             });
             html += `</form>`;
@@ -1156,6 +1210,12 @@
             document.getElementById('close-master-modal-btn').onclick = () => toggle('master-modal', false);
             document.getElementById('show-path-info-modal-btn').onclick = () => toggle('path-info-modal', true);
             document.getElementById('close-path-info-modal-btn').onclick = () => toggle('path-info-modal', false);
+            document.getElementById('change-data-id-btn').onclick = () => {
+                localStorage.removeItem('checklist_master_app_id');
+                location.reload();
+            };
+            const reloadBtn = document.getElementById('reload-data-btn');
+            if (reloadBtn) reloadBtn.onclick = () => { document.getElementById('status-indicator').textContent = '再取得中...'; fetchAllData().then(() => { document.getElementById('status-indicator').textContent = '接続成功'; document.getElementById('status-indicator').className = 'mt-2 text-sm text-green-400'; }); };
             
             // Bulk Import (Text paste)
             document.getElementById('show-bulk-import-btn').onclick = () => toggle('bulk-import-modal', true);

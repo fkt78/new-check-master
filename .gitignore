@@ -1,2 +1,4 @@
 .firebase/
 .DS_Store
+repo-data.json
+node_modules/
