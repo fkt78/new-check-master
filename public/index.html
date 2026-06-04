@@ -184,6 +184,8 @@
                              <a href="#main-tab-toilet_cleaning" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">トイレ掃除</a>
                              <a href="#main-tab-handovers" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">引き継ぎ</a>
                              <a href="#main-tab-haccp" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">HACCP</a>
+                             <a href="#main-tab-genkin_vendors" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">取引業者</a>
+                             <a href="#main-tab-genkin_vendor_products" class="tab-btn main-master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">現金仕入れ品目</a>
                         </nav>
                     </div>
                     <div id="main-master-tab-content-container">
@@ -310,6 +312,43 @@
                                 <button type="submit" class="bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold p-2 rounded-lg text-sm transition">追加</button>
                             </form>
                         </div>
+                        <!-- 取引業者（現金仕入） -->
+                        <div id="main-tab-genkin_vendors" class="main-master-tab-content hidden">
+                            <p class="text-xs text-gray-400 mb-3">現金仕入アプリの業者ドロップダウンに表示されます。IDは自動採番（画面では非表示）。</p>
+                            <form id="add-genkin-vendor-form" class="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
+                                <input type="text" id="new-genkin-vendor-name" placeholder="業者名（必須）" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500">
+                                <input type="text" id="new-genkin-vendor-phone" placeholder="電話番号（任意）" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500">
+                                <input type="text" id="new-genkin-vendor-address" placeholder="住所（任意）" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <input type="text" id="new-genkin-vendor-bank-name" placeholder="銀行名（任意）" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500">
+                                    <input type="text" id="new-genkin-vendor-bank-branch" placeholder="支店名（任意）" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500">
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <input type="text" id="new-genkin-vendor-bank-type" placeholder="口座種別（任意・普通/当座）" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500">
+                                    <input type="text" id="new-genkin-vendor-bank-number" placeholder="口座番号（任意）" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500">
+                                </div>
+                                <input type="text" id="new-genkin-vendor-bank-holder" placeholder="口座名義（任意）" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500">
+                                <input type="number" step="0.01" min="0" max="1" id="new-genkin-vendor-commission" placeholder="手数料率（任意・例: 0.18 = 18%）" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500">
+                                <input type="text" id="new-genkin-vendor-note" placeholder="備考（任意）" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500">
+                                <button type="submit" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold p-2 rounded-lg text-sm transition">業者を登録</button>
+                            </form>
+                        </div>
+                        <!-- 現金仕入れ品目 -->
+                        <div id="main-tab-genkin_vendor_products" class="main-master-tab-content hidden">
+                            <p class="text-xs text-gray-400 mb-3">品目名をマスタ登録します。単価・手数料は現場アプリでも入力できます（ここは任意）。</p>
+                            <form id="add-genkin-product-form" class="space-y-2">
+                                <div>
+                                    <label for="new-genkin-product-vendor" class="block text-sm text-gray-300 mb-1">取引業者（必須）</label>
+                                    <select id="new-genkin-product-vendor" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500">
+                                        <option value="">業者を選択</option>
+                                    </select>
+                                </div>
+                                <input type="text" id="new-genkin-product-name" placeholder="品目名（必須・例: お米2kg）" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500">
+                                <input type="number" step="1" min="0" id="new-genkin-product-unit-price" placeholder="参考単価（円・任意）" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500">
+                                <input type="number" step="0.01" min="0" max="1" id="new-genkin-product-commission" placeholder="手数料率（任意・空なら業者の設定を使用）" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500">
+                                <button type="submit" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold p-2 rounded-lg text-sm transition">品目を登録</button>
+                            </form>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -400,6 +439,8 @@
                          <a href="#master-tab-content-toilet-cleaning" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">トイレ掃除</a>
                          <a href="#master-tab-content-handovers" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">引き継ぎ</a>
                          <a href="#master-tab-content-haccp" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">HACCP</a>
+                         <a href="#master-tab-content-genkin_vendors" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">取引業者</a>
+                         <a href="#master-tab-content-genkin_vendor_products" class="tab-btn master-tab-btn whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">現金仕入れ品目</a>
                     </nav>
                 </div>
                 <div class="flex-grow overflow-y-auto pr-2 min-h-0">
@@ -421,6 +462,32 @@
                     <div id="master-tab-content-toilet-cleaning" class="master-tab-content hidden"><ul id="toilet-cleaning-master-list" class="space-y-2"></ul></div>
                     <div id="master-tab-content-handovers" class="master-tab-content hidden"><ul id="handover-master-list" class="space-y-2"></ul></div>
                     <div id="master-tab-content-haccp" class="master-tab-content hidden"><ul id="haccp-master-list" class="space-y-2"></ul></div>
+                    <div id="master-tab-content-genkin_vendors" class="master-tab-content hidden">
+                        <table class="w-full text-sm text-left text-gray-300">
+                            <thead class="text-xs text-gray-400 uppercase bg-gray-700">
+                                <tr>
+                                    <th class="px-4 py-2 rounded-l-lg">業者名</th>
+                                    <th class="px-4 py-2">電話</th>
+                                    <th class="px-4 py-2">手数料率</th>
+                                    <th class="px-4 py-2 rounded-r-lg text-center">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="genkin-vendor-master-list"></tbody>
+                        </table>
+                    </div>
+                    <div id="master-tab-content-genkin_vendor_products" class="master-tab-content hidden">
+                        <table class="w-full text-sm text-left text-gray-300">
+                            <thead class="text-xs text-gray-400 uppercase bg-gray-700">
+                                <tr>
+                                    <th class="px-4 py-2 rounded-l-lg">品目名</th>
+                                    <th class="px-4 py-2">業者</th>
+                                    <th class="px-4 py-2">参考単価</th>
+                                    <th class="px-4 py-2 rounded-r-lg text-center">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="genkin-product-master-list"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -482,7 +549,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, doc, getDoc, getDocs, updateDoc, deleteDoc, serverTimestamp, writeBatch, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, writeBatch, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         
         // 正しいFirebase設定
         const firebaseConfig = {
@@ -543,6 +610,59 @@
             haccp: { headers: ['name'] },
         };
 
+        /** 現金仕入マスタ（常に general-master-data / data 配下・現金仕入アプリと同じパス） */
+        const GENKIN_MASTER_APP_ID = 'general-master-data';
+        const GENKIN_PUBLIC_SCOPE = 'data';
+
+        const GENKIN_COLLECTIONS_SCHEMA = {
+            genkin_vendors: {
+                name: '取引業者',
+                fields: ['name', 'phone', 'address', 'bankName', 'bankBranch', 'bankAccountType', 'bankAccountNumber', 'bankAccountHolder', 'defaultCommissionRate', 'note']
+            },
+            genkin_vendor_products: {
+                name: '現金仕入れ品目',
+                fields: ['name', 'unitPriceYen', 'defaultCommissionRate']
+            }
+        };
+
+        const FIELD_LABELS = {
+            name: '名称', phone: '電話番号', address: '住所',
+            bankName: '銀行名', bankBranch: '支店名', bankAccountType: '口座種別',
+            bankAccountNumber: '口座番号', bankAccountHolder: '口座名義',
+            defaultCommissionRate: '手数料率（任意）', note: '備考',
+            unitPriceYen: '参考単価（円・任意）', vendorId: '取引業者'
+        };
+
+        function stripUndefinedForFirestore(obj) {
+            const out = {};
+            for (const [key, value] of Object.entries(obj)) {
+                if (value === undefined || value === null || value === '') continue;
+                out[key] = value;
+            }
+            return out;
+        }
+
+        function parseOptionalRate(val) {
+            if (val === undefined || val === null || String(val).trim() === '') return undefined;
+            const n = parseFloat(val);
+            return Number.isFinite(n) ? n : undefined;
+        }
+
+        function parseOptionalYen(val) {
+            if (val === undefined || val === null || String(val).trim() === '') return undefined;
+            const n = parseFloat(val);
+            return Number.isFinite(n) ? Math.round(n) : undefined;
+        }
+
+        function initGenkinCollections() {
+            collections.genkin_vendors = collection(db, 'artifacts', GENKIN_MASTER_APP_ID, 'public', GENKIN_PUBLIC_SCOPE, 'genkin_vendors');
+            collections.genkin_vendor_products = collection(db, 'artifacts', GENKIN_MASTER_APP_ID, 'public', GENKIN_PUBLIC_SCOPE, 'genkin_vendor_products');
+        }
+
+        function vendorNameById(vendorId) {
+            const v = (masterCache.genkin_vendors || []).find(x => x.id === vendorId);
+            return v ? v.name : vendorId;
+        }
 
         // Initialization
         async function init() {
@@ -573,6 +693,7 @@
             Object.keys(COLLECTIONS_SCHEMA).forEach(key => {
                 collections[key] = collection(db, 'artifacts', APP_ID, 'public', 'data', key);
             });
+            initGenkinCollections();
 
             try {
                 await signInAnonymously(auth);
@@ -622,7 +743,31 @@
                     }
                 });
                 await Promise.all(promises);
-                const totalCount = Object.values(masterCache).reduce((sum, arr) => sum + arr.length, 0);
+
+                const genkinKeys = ['genkin_vendors', 'genkin_vendor_products'];
+                const genkinErrors = {};
+                for (const key of genkinKeys) {
+                    try {
+                        const snap = await getDocs(collections[key]);
+                        let items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        if (key === 'genkin_vendors') {
+                            items.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ja'));
+                        } else {
+                            items.sort((a, b) => {
+                                const vn = vendorNameById(a.vendorId).localeCompare(vendorNameById(b.vendorId), 'ja');
+                                return vn !== 0 ? vn : (a.name || '').localeCompare(b.name || '', 'ja');
+                            });
+                        }
+                        masterCache[key] = items;
+                    } catch (e) {
+                        console.warn(`Fetch error for ${key}:`, e);
+                        masterCache[key] = [];
+                        genkinErrors[key] = (e && e.message) || String(e);
+                        hasError = true;
+                    }
+                }
+
+                const totalCount = Object.values(masterCache).reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0);
                 if (hasError && dbErrorEl) {
                     dbErrorEl.classList.remove('hidden');
                     dbErrorEl.querySelector('p:last-child').textContent = '一部のデータ取得に失敗しました。Data ID が general-master-data か確認し、Firestore のルールを確認してください。';
@@ -640,7 +785,13 @@
                         const err = fetchErrors[k];
                         return `${COLLECTIONS_SCHEMA[k].name}: ${err ? 'エラー' : n + '件'}`;
                     }).join(' / ');
-                    summaryEl.innerHTML = `<span class="text-gray-500">取得元: </span><code class="text-gray-400">${path}</code><br><span class="text-gray-500">取得結果: </span>${counts}`;
+                    const genkinPath = `artifacts/${GENKIN_MASTER_APP_ID}/public/${GENKIN_PUBLIC_SCOPE}/genkin_*`;
+                    const genkinCounts = genkinKeys.map(k => {
+                        const n = (masterCache[k] || []).length;
+                        const err = genkinErrors[k];
+                        return `${GENKIN_COLLECTIONS_SCHEMA[k].name}: ${err ? 'エラー' : n + '件'}`;
+                    }).join(' / ');
+                    summaryEl.innerHTML = `<span class="text-gray-500">取得元: </span><code class="text-gray-400">${path}</code><br><span class="text-gray-500">取得結果: </span>${counts}<br><span class="text-gray-500">現金仕入: </span><code class="text-gray-400">${genkinPath}</code> — ${genkinCounts}`;
                 }
                 updateUI();
             } catch (e) {
@@ -685,6 +836,16 @@
             updateSelect('store', masterCache.stores);
             updateSelect('role', masterCache.roles);
             updateSelect('skill-category-select', masterCache.skill_categories);
+
+            const vendorSelect = document.getElementById('new-genkin-product-vendor');
+            if (vendorSelect) {
+                const cur = vendorSelect.value;
+                vendorSelect.innerHTML = '<option value="">業者を選択</option>';
+                (masterCache.genkin_vendors || []).forEach(v => {
+                    vendorSelect.innerHTML += `<option value="${escapeHtml(v.id)}">${escapeHtml(v.name)}</option>`;
+                });
+                if (cur) vendorSelect.value = cur;
+            }
         }
 
         function updateWorkTypeCheckboxes() {
@@ -807,6 +968,110 @@
             renderTable('work_items', 'work-item-master-list', ['name', 'associated_types', 'days_of_week', 'appropriate_time']);
             renderTable('work_times', 'work-times-master-list', ['name', 'category', 'standard_time']);
             renderTable('skill_checks', 'skill-check-master-list', ['name', 'category']);
+
+            const vendorTbody = document.getElementById('genkin-vendor-master-list');
+            if (vendorTbody) {
+                vendorTbody.innerHTML = '';
+                (masterCache.genkin_vendors || []).forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'bg-gray-800 border-b border-gray-700';
+                    const rate = item.defaultCommissionRate != null ? `${(Number(item.defaultCommissionRate) * 100).toFixed(0)}%` : '—';
+                    tr.innerHTML = `
+                        <td class="px-4 py-2 font-medium text-white">${escapeHtml(item.name || '')}</td>
+                        <td class="px-4 py-2">${escapeHtml(item.phone || '—')}</td>
+                        <td class="px-4 py-2">${escapeHtml(rate)}</td>
+                        <td class="px-4 py-2 text-center flex gap-2 justify-center">
+                            <button class="text-orange-400 edit-btn" data-id="${escapeHtml(item.id)}" data-col="genkin_vendors">編集</button>
+                            <button class="text-red-500 delete-btn" data-id="${escapeHtml(item.id)}" data-col="genkin_vendors">削除</button>
+                        </td>`;
+                    vendorTbody.appendChild(tr);
+                });
+            }
+
+            const productTbody = document.getElementById('genkin-product-master-list');
+            if (productTbody) {
+                productTbody.innerHTML = '';
+                (masterCache.genkin_vendor_products || []).forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'bg-gray-800 border-b border-gray-700';
+                    const price = item.unitPriceYen != null ? `${item.unitPriceYen}円` : '—';
+                    tr.innerHTML = `
+                        <td class="px-4 py-2 font-medium text-white">${escapeHtml(item.name || '')}</td>
+                        <td class="px-4 py-2">${escapeHtml(vendorNameById(item.vendorId))}</td>
+                        <td class="px-4 py-2">${escapeHtml(price)}</td>
+                        <td class="px-4 py-2 text-center flex gap-2 justify-center">
+                            <button class="text-orange-400 edit-btn" data-id="${escapeHtml(item.id)}" data-col="genkin_vendor_products">編集</button>
+                            <button class="text-red-500 delete-btn" data-id="${escapeHtml(item.id)}" data-col="genkin_vendor_products">削除</button>
+                        </td>`;
+                    productTbody.appendChild(tr);
+                });
+            }
+        }
+
+        async function handleAddGenkinVendor(e) {
+            e.preventDefault();
+            const name = document.getElementById('new-genkin-vendor-name')?.value?.trim();
+            if (!name) { alert('業者名を入力してください'); return; }
+            const vendorId = `vendor-prod-${Date.now().toString(36)}`;
+            const data = stripUndefinedForFirestore({
+                id: vendorId,
+                name,
+                phone: document.getElementById('new-genkin-vendor-phone')?.value?.trim(),
+                address: document.getElementById('new-genkin-vendor-address')?.value?.trim(),
+                bankName: document.getElementById('new-genkin-vendor-bank-name')?.value?.trim(),
+                bankBranch: document.getElementById('new-genkin-vendor-bank-branch')?.value?.trim(),
+                bankAccountType: document.getElementById('new-genkin-vendor-bank-type')?.value?.trim(),
+                bankAccountNumber: document.getElementById('new-genkin-vendor-bank-number')?.value?.trim(),
+                bankAccountHolder: document.getElementById('new-genkin-vendor-bank-holder')?.value?.trim(),
+                defaultCommissionRate: parseOptionalRate(document.getElementById('new-genkin-vendor-commission')?.value),
+                note: document.getElementById('new-genkin-vendor-note')?.value?.trim(),
+                createdAt: serverTimestamp()
+            });
+            try {
+                await setDoc(doc(collections.genkin_vendors, vendorId), data);
+                e.target.reset();
+                alert('業者を登録しました');
+                await fetchAllData();
+            } catch (err) {
+                console.error(err);
+                alert('登録に失敗しました');
+            }
+        }
+
+        async function handleAddGenkinProduct(e) {
+            e.preventDefault();
+            const vendorId = document.getElementById('new-genkin-product-vendor')?.value;
+            const name = document.getElementById('new-genkin-product-name')?.value?.trim();
+            if (!vendorId) { alert('取引業者を選択してください'); return; }
+            if (!name) { alert('品目名を入力してください'); return; }
+            const productId = `prod-${Date.now().toString(36)}`;
+            const docId = `${vendorId}__${productId}`;
+            const data = stripUndefinedForFirestore({
+                id: productId,
+                vendorId,
+                name,
+                unitPriceYen: parseOptionalYen(document.getElementById('new-genkin-product-unit-price')?.value),
+                defaultCommissionRate: parseOptionalRate(document.getElementById('new-genkin-product-commission')?.value),
+                createdAt: serverTimestamp()
+            });
+            try {
+                await setDoc(doc(collections.genkin_vendor_products, docId), data);
+                e.target.reset();
+                alert('品目を登録しました');
+                await fetchAllData();
+            } catch (err) {
+                console.error(err);
+                alert('登録に失敗しました');
+            }
+        }
+
+        async function deleteGenkinVendorCascade(vendorId) {
+            const prodQ = query(collections.genkin_vendor_products, where('vendorId', '==', vendorId));
+            const prodSnap = await getDocs(prodQ);
+            const batch = writeBatch(db);
+            prodSnap.docs.forEach(d => batch.delete(d.ref));
+            batch.delete(doc(collections.genkin_vendors, vendorId));
+            await batch.commit();
         }
 
         // --- Forms Handling (省略) ---
@@ -897,9 +1162,16 @@
                 const id = e.target.dataset.id;
                 const col = e.target.dataset.col;
                 if (!id || !col || !collections[col]) return;
-                if(confirm('削除しますか？')) {
+                const msg = col === 'genkin_vendors'
+                    ? 'この業者と紐づく品目も削除します。よろしいですか？'
+                    : '削除しますか？';
+                if(confirm(msg)) {
                     try {
-                        await deleteDoc(doc(collections[col], id));
+                        if (col === 'genkin_vendors') {
+                            await deleteGenkinVendorCascade(id);
+                        } else {
+                            await deleteDoc(doc(collections[col], id));
+                        }
                         await fetchAllData();
                     } catch (err) {
                         console.error(err);
@@ -922,15 +1194,20 @@
             const item = (masterCache[colName] || []).find(i => i.id === id);
             if(!item) return;
 
-            // Generate Form based on schema
-            const schema = COLLECTIONS_SCHEMA[colName];
+            const schema = COLLECTIONS_SCHEMA[colName] || GENKIN_COLLECTIONS_SCHEMA[colName];
+            if (!schema) return;
+
             let html = `<form id="dynamic-edit-form" class="space-y-4">`;
-            
-            // Fields logic
+
+            if (colName === 'genkin_vendor_products') {
+                html += `<div class="text-sm text-gray-400">業者: <span class="text-white">${escapeHtml(vendorNameById(item.vendorId))}</span>（変更不可）</div>`;
+            }
+
             const fields = schema.fields;
             
             fields.forEach(field => {
-                let val = item[field] || '';
+                let val = item[field] ?? '';
+                const label = FIELD_LABELS[field] || field;
                 
                 // Dropdown for Store/Role/Category
                 if (['store', 'role', 'category'].includes(field)) {
@@ -942,7 +1219,7 @@
                         selectHtml += `<option value="${nameEsc}" ${m.name === val ? 'selected' : ''}>${nameEsc}</option>`;
                     });
                     selectHtml += `</select>`;
-                    html += `<div><label class="block text-sm text-gray-400">${escapeHtml(field)}</label>${selectHtml}</div>`;
+                    html += `<div><label class="block text-sm text-gray-400">${escapeHtml(label)}</label>${selectHtml}</div>`;
                     return;
                 }
 
@@ -952,16 +1229,18 @@
                 } 
                 // Array fields (assigned_tasks, associated_types, days_of_week)
                 else if(Array.isArray(val)) {
-                    html += `<div><label class="block text-sm text-gray-400">${escapeHtml(field)} (カンマ区切り)</label><input type="text" name="${field}" value="${escapeHtml(val.join(','))}" class="w-full bg-gray-700 border border-gray-600 rounded p-2"></div>`;
+                    html += `<div><label class="block text-sm text-gray-400">${escapeHtml(label)} (カンマ区切り)</label><input type="text" name="${field}" value="${escapeHtml(val.join(','))}" class="w-full bg-gray-700 border border-gray-600 rounded p-2"></div>`;
                 } 
                 // Standard input types
                 else {
                     let inputType = 'text';
-                    if (field.includes('time') || field.includes('wage') || field.includes('temp_') || field.includes('pincode')) inputType = 'number';
+                    if (field.includes('time') || field.includes('wage') || field.includes('temp_') || field.includes('pincode') || field === 'unitPriceYen') inputType = 'number';
+                    if (field === 'defaultCommissionRate') { inputType = 'number'; }
                     if (field.includes('Date')) inputType = 'date';
                     if (field.includes('email')) inputType = 'email';
+                    const stepAttr = field === 'defaultCommissionRate' ? ' step="0.01" min="0" max="1"' : (field === 'unitPriceYen' ? ' step="1" min="0"' : '');
                     
-                    html += `<div><label class="block text-sm text-gray-400">${escapeHtml(field)}</label><input type="${inputType}" name="${field}" value="${escapeHtml(val)}" class="w-full bg-gray-700 border border-gray-600 rounded p-2"></div>`;
+                    html += `<div><label class="block text-sm text-gray-400">${escapeHtml(label)}</label><input type="${inputType}" name="${field}" value="${escapeHtml(val)}"${stepAttr} class="w-full bg-gray-700 border border-gray-600 rounded p-2"></div>`;
                 }
             });
             html += `</form>`;
@@ -987,16 +1266,27 @@
                     }
                 });
                 // Number handling
-                 ['hourly_wage', 'appropriate_time', 'standard_time', 'temp_min', 'temp_max'].forEach(k => {
+                 ['hourly_wage', 'appropriate_time', 'standard_time', 'temp_min', 'temp_max', 'unitPriceYen'].forEach(k => {
                     if (newData[k] !== undefined && newData[k] !== null && newData[k] !== "") {
                         newData[k] = parseFloat(newData[k]) || null;
                     } else if (newData[k] === "") {
-                         newData[k] = null;
+                         delete newData[k];
                     }
                 });
+                if (newData.defaultCommissionRate !== undefined) {
+                    const r = parseOptionalRate(newData.defaultCommissionRate);
+                    if (r === undefined) delete newData.defaultCommissionRate;
+                    else newData.defaultCommissionRate = r;
+                }
+                if (colName.startsWith('genkin_')) {
+                    Object.keys(newData).forEach(k => { if (newData[k] === '') delete newData[k]; });
+                }
 
                 try {
-                    await updateDoc(doc(collections[colName], id), newData);
+                    const payload = colName.startsWith('genkin_')
+                        ? stripUndefinedForFirestore(newData)
+                        : newData;
+                    await updateDoc(doc(collections[colName], id), payload);
                     modal.classList.add('hidden');
                     fetchAllData();
                 } catch(e) { console.error(e); alert('更新失敗'); }
@@ -1195,6 +1485,8 @@
             document.getElementById('add-toilet-cleaning-form').addEventListener('submit', e => handleAdd(e, 'toilet_cleaning'));
             document.getElementById('add-handover-form').addEventListener('submit', e => handleAdd(e, 'handovers'));
             document.getElementById('add-haccp-form').addEventListener('submit', e => handleAdd(e, 'haccp'));
+            document.getElementById('add-genkin-vendor-form').addEventListener('submit', handleAddGenkinVendor);
+            document.getElementById('add-genkin-product-form').addEventListener('submit', handleAddGenkinProduct);
 
             // Modals
             const toggle = (id, show) => {
@@ -1395,6 +1687,13 @@
                 const div = document.createElement('div');
                 div.className = "bg-gray-700 p-3 rounded flex justify-between items-center";
                 div.innerHTML = `<div><span class="text-white font-bold">${COLLECTIONS_SCHEMA[key].name}</span><br><code class="text-xs text-gray-400 select-all">${path}</code></div><button class="text-xs bg-gray-600 px-2 py-1 rounded hover:bg-gray-500" onclick="navigator.clipboard.writeText('${path}').then(()=>alert('コピーしました'))">Copy</button>`;
+                list.appendChild(div);
+            });
+            Object.keys(GENKIN_COLLECTIONS_SCHEMA).forEach(key => {
+                const path = `artifacts/${GENKIN_MASTER_APP_ID}/public/${GENKIN_PUBLIC_SCOPE}/${key}`;
+                const div = document.createElement('div');
+                div.className = "bg-gray-700 p-3 rounded flex justify-between items-center border border-sky-900";
+                div.innerHTML = `<div><span class="text-white font-bold">${GENKIN_COLLECTIONS_SCHEMA[key].name}</span> <span class="text-xs text-sky-400">（現金仕入）</span><br><code class="text-xs text-gray-400 select-all">${path}</code></div><button class="text-xs bg-gray-600 px-2 py-1 rounded hover:bg-gray-500" onclick="navigator.clipboard.writeText('${path}').then(()=>alert('コピーしました'))">Copy</button>`;
                 list.appendChild(div);
             });
         }
