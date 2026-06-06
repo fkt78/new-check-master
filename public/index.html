@@ -701,6 +701,7 @@
                     setupTabs();
                     setupEventListeners();
                     populatePathInfo();
+                    applyGenkinDeepLink();
                 }
             });
         }
@@ -1629,6 +1630,35 @@
         }
 
         // --- Tabs Logic ---
+        function activateMainMasterTab(tabId) {
+            const container = document.getElementById('main-master-tabs');
+            if (!container || !tabId) return;
+            const link = container.querySelector(`a[href="#${tabId}"]`);
+            if (!link) return;
+            container.querySelectorAll('a').forEach(a => a.classList.remove('active', 'border-purple-400', 'text-purple-300'));
+            link.classList.add('active', 'border-purple-400', 'text-purple-300');
+            document.querySelectorAll('.main-master-tab-content').forEach(el => el.classList.add('hidden'));
+            const target = document.getElementById(tabId);
+            if (target) target.classList.remove('hidden');
+        }
+
+        function applyGenkinDeepLink() {
+            const params = new URLSearchParams(location.search);
+            const col = params.get('genkin_col');
+            const editId = params.get('genkin_edit');
+            const hashTab = (location.hash || '').replace(/^#/, '');
+            const tabId = hashTab.startsWith('main-tab-') ? hashTab : (col === 'genkin_products' ? 'main-tab-genkin_products' : (col === 'genkin_vendors' ? 'main-tab-genkin_vendors' : ''));
+            if (tabId) activateMainMasterTab(tabId);
+            if (col === 'genkin_products' && editId) {
+                const item = (masterCache.genkin_products || []).find(i => i.id === editId);
+                if (item) openEditModal('genkin_products', editId);
+            }
+            if (col === 'genkin_vendors' && editId) {
+                const item = (masterCache.genkin_vendors || []).find(i => i.id === editId);
+                if (item) openEditModal('genkin_vendors', editId);
+            }
+        }
+
         function setupTabs() {
             const setup = (containerId, contentClass) => {
                 const container = document.getElementById(containerId);
@@ -1642,8 +1672,10 @@
                     const target = document.getElementById(e.target.getAttribute('href').substring(1));
                     if(target) target.classList.remove('hidden');
                 });
-                 // 初期アクティブタブを設定
-                 container.querySelector('a')?.click();
+                 const hasGenkinDeepLink = new URLSearchParams(location.search).has('genkin_col') || (location.hash || '').startsWith('#main-tab-genkin_');
+                 if (!hasGenkinDeepLink) {
+                     container.querySelector('a')?.click();
+                 }
             };
             setup('main-master-tabs', 'main-master-tab-content');
             setup('master-tabs', 'master-tab-content');
