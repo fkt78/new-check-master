@@ -335,11 +335,15 @@
                         </div>
                         <!-- 現金仕入れ品目 -->
                         <div id="main-tab-genkin_products" class="main-master-tab-content hidden">
-                            <p class="text-xs text-gray-400 mb-3">品目名の表記を統一するための共通マスタです（お米／米などのゆれを防ぐ）。業者の選択は不要です。単価・手数料は現場アプリでも入力できます（ここは任意）。</p>
+                            <p class="text-xs text-gray-400 mb-3">品目名の表記を統一するための共通マスタです（お米／米などのゆれを防ぐ）。単価・手数料は現場アプリでも入力できます（ここは任意）。</p>
                             <form id="add-genkin-product-form" class="space-y-2">
                                 <input type="text" id="new-genkin-product-name" placeholder="品目名（必須・例: お米2kg）" required class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500">
                                 <input type="number" step="1" min="0" id="new-genkin-product-unit-price" placeholder="参考単価（円・任意）" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500">
                                 <input type="number" step="0.01" min="0" max="1" id="new-genkin-product-commission" placeholder="手数料率（任意・例: 0.18 = 18%）" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500">
+                                <div>
+                                    <p class="text-xs text-gray-400 mb-1">対象業者（未選択なら全業者共通）</p>
+                                    <div id="new-genkin-product-vendor-scope" class="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto bg-gray-900/40 rounded-lg p-2"></div>
+                                </div>
                                 <button type="submit" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold p-2 rounded-lg text-sm transition">品目を登録</button>
                             </form>
                         </div>
@@ -476,6 +480,7 @@
                                     <th class="px-4 py-2 rounded-l-lg">品目名</th>
                                     <th class="px-4 py-2">参考単価</th>
                                     <th class="px-4 py-2">手数料率</th>
+                                    <th class="px-4 py-2">対象業者</th>
                                     <th class="px-4 py-2 rounded-r-lg text-center">操作</th>
                                 </tr>
                             </thead>
@@ -615,7 +620,7 @@
             },
             genkin_products: {
                 name: '現金仕入れ品目',
-                fields: ['name', 'unitPriceYen', 'defaultCommissionRate']
+                fields: ['name', 'unitPriceYen', 'defaultCommissionRate', 'vendorIds']
             }
         };
 
@@ -624,7 +629,8 @@
             bankName: '銀行名', bankBranch: '支店名', bankAccountType: '口座種別',
             bankAccountNumber: '口座番号', bankAccountHolder: '口座名義',
             defaultCommissionRate: '手数料率（任意）', note: '備考',
-            unitPriceYen: '参考単価（円・任意）', vendorId: '取引業者'
+            unitPriceYen: '参考単価（円・任意）', vendorId: '取引業者',
+            vendorIds: '対象業者（未選択なら全業者共通）'
         };
 
         function stripUndefinedForFirestore(obj) {
@@ -970,10 +976,15 @@
                     tr.className = 'bg-gray-800 border-b border-gray-700';
                     const price = item.unitPriceYen != null ? `${item.unitPriceYen}円` : '—';
                     const rate = item.defaultCommissionRate != null ? `${(Number(item.defaultCommissionRate) * 100).toFixed(0)}%` : '—';
+                    const vendorIds = Array.isArray(item.vendorIds) ? item.vendorIds : [];
+                    const vendorScope = vendorIds.length
+                        ? vendorIds.map(id => (masterCache.genkin_vendors || []).find(v => v.id === id)?.name || id).join('、')
+                        : '全業者共通';
                     tr.innerHTML = `
                         <td class="px-4 py-2 font-medium text-white">${escapeHtml(item.name || '')}</td>
                         <td class="px-4 py-2">${escapeHtml(price)}</td>
                         <td class="px-4 py-2">${escapeHtml(rate)}</td>
+                        <td class="px-4 py-2 text-xs">${escapeHtml(vendorScope)}</td>
                         <td class="px-4 py-2 text-center flex gap-2 justify-center">
                             <button class="text-orange-400 edit-btn" data-id="${escapeHtml(item.id)}" data-col="genkin_products">編集</button>
                             <button class="text-red-500 delete-btn" data-id="${escapeHtml(item.id)}" data-col="genkin_products">削除</button>
@@ -981,6 +992,23 @@
                     productTbody.appendChild(tr);
                 });
             }
+
+            renderGenkinProductVendorScopeCheckboxes();
+        }
+
+        /** 品目追加フォームの「対象業者」チェックボックスを業者マスタから再構築 */
+        function renderGenkinProductVendorScopeCheckboxes() {
+            const container = document.getElementById('new-genkin-product-vendor-scope');
+            if (!container) return;
+            const vendors = masterCache.genkin_vendors || [];
+            container.innerHTML = vendors.length
+                ? vendors.map(v => `
+                    <label class="flex items-center gap-2 text-xs text-gray-300 py-0.5">
+                        <input type="checkbox" name="vendorIds" value="${escapeHtml(v.id)}">
+                        ${escapeHtml(v.name)}
+                    </label>
+                `).join('')
+                : '<p class="text-xs text-gray-500 col-span-2">業者が未登録です</p>';
         }
 
         async function handleAddGenkinVendor(e) {
@@ -1023,12 +1051,16 @@
             if (dup) {
                 if (!confirm(`「${name}」は既に登録されています。続けて登録しますか？`)) return;
             }
+            const vendorIds = Array.from(
+                document.querySelectorAll('#new-genkin-product-vendor-scope input[name="vendorIds"]:checked')
+            ).map(el => el.value);
             const productId = `prod-${Date.now().toString(36)}`;
             const data = stripUndefinedForFirestore({
                 id: productId,
                 name,
                 unitPriceYen: parseOptionalYen(document.getElementById('new-genkin-product-unit-price')?.value),
                 defaultCommissionRate: parseOptionalRate(document.getElementById('new-genkin-product-commission')?.value),
+                vendorIds,
                 createdAt: serverTimestamp()
             });
             try {
@@ -1197,6 +1229,22 @@
                     return;
                 }
 
+                // Checkboxes for genkin_products の対象業者（複数選択・未選択=全業者共通）
+                if (field === 'vendorIds') {
+                    const selectedIds = Array.isArray(val) ? val : [];
+                    const vendors = masterCache.genkin_vendors || [];
+                    const checkboxesHtml = vendors.length
+                        ? vendors.map(v => `
+                            <label class="flex items-center gap-2 text-sm text-gray-300 py-0.5">
+                                <input type="checkbox" name="vendorIds" value="${escapeHtml(v.id)}" ${selectedIds.includes(v.id) ? 'checked' : ''}>
+                                ${escapeHtml(v.name)}
+                            </label>
+                        `).join('')
+                        : '<p class="text-xs text-gray-500">業者が未登録です</p>';
+                    html += `<div><label class="block text-sm text-gray-400 mb-1">${escapeHtml(label)}</label><div class="grid grid-cols-2 gap-1 max-h-40 overflow-y-auto bg-gray-900/40 rounded-lg p-2">${checkboxesHtml}</div></div>`;
+                    return;
+                }
+
                 // Checkbox for manual_drain
                 if(field === 'manual_drain') {
                     html += `<label class="flex items-center"><input type="checkbox" name="${field}" ${val ? 'checked' : ''} class="mr-2">手動排水</label>`;
@@ -1226,12 +1274,21 @@
             saveBtn.onclick = async () => {
                 const form = document.getElementById('dynamic-edit-form');
                 const newData = {};
-                new FormData(form).forEach((v, k) => newData[k] = v);
-                
+                new FormData(form).forEach((v, k) => {
+                    if (k === 'vendorIds') return; // 複数選択のため下でまとめて拾う
+                    newData[k] = v;
+                });
+
                 // Final data processing before update
                 // Checkbox handling
                 if(form.querySelector('input[name="manual_drain"]')) {
                     newData.manual_drain = form.querySelector('input[name="manual_drain"]').checked;
+                }
+                // 対象業者（複数チェックボックス）
+                if (form.querySelector('input[name="vendorIds"]')) {
+                    newData.vendorIds = Array.from(
+                        form.querySelectorAll('input[name="vendorIds"]:checked')
+                    ).map(el => el.value);
                 }
                 // Array handling
                 ['assigned_tasks', 'associated_types', 'days_of_week'].forEach(k => {
